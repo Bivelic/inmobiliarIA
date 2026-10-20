@@ -1,0 +1,31 @@
+/* Estilos mínimos de la Entrega 2; la interfaz final la diseña el equipo de UX/UI. */
+:root {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: #1d2433;
+  background: #f6f7f9;
+}
+body { margin: 0; }
+main { max-width: 880px; margin: 0 auto; padding: 24px 16px 48px; }
+header h1 { margin: 0 0 4px; }
+header p { margin: 0 0 24px; color: #5b6475; }
+.filtros { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
+.filtros label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: #5b6475; }
+.filtros select, .filtros input {
+  padding: 8px; border: 1px solid #c9ced8; border-radius: 6px; font-size: 15px; min-width: 180px;
+}
+.total { color: #5b6475; font-size: 14px; }
+.error { color: #b42318; }
+.avisos { list-style: none; padding: 0; display: grid; gap: 12px; }
+.avisos li { background: #fff; border: 1px solid #e3e6eb; border-radius: 8px; padding: 16px; }
+.avisos h2 { font-size: 17px; margin: 0 0 6px; }
+.datos { margin: 0 0 8px; }
+.extracto { margin: 0 0 8px; color: #5b6475; font-size: 14px; }
+.avisos a { color: #1a5fd0; font-weight: 600; }
+
+@media (prefers-color-scheme: dark) {
+  :root { color: #e7eaf0; background: #12151b; }
+  header p, .total, .extracto, .filtros label { color: #a3abba; }
+  .avisos li { background: #1b2029; border-color: #2c3340; }
+  .filtros select, .filtros input { background: #1b2029; color: inherit; border-color: #3a4252; }
+  .avisos a { color: #7aa7ff; }
+}

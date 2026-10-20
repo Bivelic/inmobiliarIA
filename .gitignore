@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Secretos: NUNCA subir el .env real
+.env
+
+# Salidas de los scrapers
+scrapers/salidas/
+*.jsonl
+*.csv
+.scrapy/
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Editores y sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
