@@ -2,7 +2,7 @@
 
 Plataforma web que reúne avisos de arriendo de varios portales chilenos y usa IA para encontrar lo que los filtros no capturan. Proyecto de Sextante Digital SpA para Aurora Propiedades (IIC3113).
 
-Esta es la **base del repositorio**: estructura, base de datos, modelo de datos, pipeline de scraping, API y frontend mínimos, todo conectado y probado. Sobre ella se construyen los scrapers, la API y la interfaz.
+**Estado al 20/10/2026:** dos portales funcionando y guardando en la misma base: **Chilepropiedades** (Scrapy, verificado contra una ficha real) y **TocToc** (`property_search`). Además están la API y un frontend mínimo, todo conectado y con pruebas. Faltan Yapo o Economicos como tercer portal y el módulo de IA (H3).
 
 ---
 
@@ -10,32 +10,49 @@ Esta es la **base del repositorio**: estructura, base de datos, modelo de datos,
 
 ```
 inmobiliaria/
-├── core/                  Código compartido por scrapers y API
-│   ├── config.py          Lee el archivo .env
-│   ├── db.py              Conexión a PostgreSQL
-│   ├── modelos.py         AvisoNormalizado: el formato común de un aviso (Pydantic)
-│   ├── limpieza.py        Quita teléfonos, correos, RUT y nombres de las descripciones
-│   ├── normalizacion.py   Precios, números y comunas al formato común
-│   └── indicadores.py     Valor de la UF del día
+├── core/                       Código compartido por scrapers y API
+│   ├── config.py               Lee el archivo .env
+│   ├── db.py                   Conexión a PostgreSQL
+│   ├── modelos.py              AvisoNormalizado: formato común de un aviso + validaciones
+│   ├── limpieza.py             Quita teléfonos, correos, RUT y nombres de las descripciones
+│   ├── normalizacion.py        Precios, números y comunas al formato común
+│   ├── guardado.py             Guarda los avisos: inserta/actualiza, errores, conteos y bajas
+│   └── indicadores.py          Valor de la UF del día
 ├── db/
-│   ├── 01_schema.sql      Las 12 tablas, vistas de métricas y portales
-│   └── 02_comunas.sql     Las 52 comunas de la Región Metropolitana
-├── scrapers/              Proyecto Scrapy
-│   └── inmobiliaria_scrapers/
-│       ├── settings.py    Reglas de cortesía: robots.txt, pausa de 2 s, User-Agent honesto
-│       ├── pipelines.py   Valida, limpia, guarda y cuenta cada aviso
-│       └── spiders/
-│           ├── base.py              Clase base para todos los portales
-│           └── chilepropiedades.py  Primer spider (selectores por verificar)
-├── api/main.py            API FastAPI: /publicaciones, /comunas, /metricas, /health
-├── web/                   Frontend React + TypeScript + Vite
+│   ├── 01_schema.sql           Las 12 tablas, vistas de métricas y portales iniciales
+│   ├── 02_comunas.sql          Las 52 comunas de la Región Metropolitana
+│   └── 03_portales_extra.sql   Portales agregados después (TocToc)
+├── scrapers/
+│   ├── inmobiliaria_scrapers/  Proyecto Scrapy
+│   │   ├── settings.py         Reglas de cortesía: robots.txt, pausa de 2 s, User-Agent honesto
+│   │   ├── pipelines.py        Pasa cada aviso a core/guardado.py
+│   │   └── spiders/
+│   │       ├── base.py              Clase base para los spiders
+│   │       └── chilepropiedades.py  Lee el JSON-LD de cada ficha (verificado 20/10)
+│   ├── property_search/        SIN modificar (TocToc)
+│   └── cargar_property_search.py  Adaptador: corre property_search y guarda en la base
+├── api/main.py                 API FastAPI: /publicaciones, /comunas, /metricas, /health
+├── web/                        Frontend React + TypeScript + Vite
 ├── scripts/
-│   ├── init_db.py         Crea las tablas en la base del .env
-│   └── check_setup.py     Verifica que todo esté listo
-├── tests/                 Pruebas con pytest
-├── docker-compose.yml     PostgreSQL 16 local
-└── .github/workflows/ci.yml   Revisa cada push: estilo, pruebas y build
+│   ├── init_db.py              Crea las tablas o carga los datos iniciales nuevos
+│   ├── check_setup.py          Verifica que todo esté listo
+│   └── resumen.py              Avisos y estado de la última ejecución, por portal
+├── tests/                      Pruebas con pytest
+│   └── fixtures/               Páginas guardadas para probar sin conexión
+├── docker-compose.yml          PostgreSQL 16 local
+└── .github/workflows/ci.yml    Revisa cada push: estilo, pruebas y build
 ```
+
+### Cómo fluyen los datos
+
+```
+Chilepropiedades ──► spider Scrapy ─────────────┐
+                                                ├──► core/guardado.py ──► PostgreSQL ──► API ──► web
+TocToc ──► property_search ──► adaptador ───────┘    (valida, limpia datos personales,
+                                                      convierte precios, cuenta errores)
+```
+
+Los dos scrapers terminan en `core/guardado.py`, así que todos los portales se validan, se limpian y se miden igual.
 
 ---
 
@@ -48,29 +65,28 @@ inmobiliaria/
 | [Node.js](https://nodejs.org/) | 22 LTS | Frontend | `node --version` |
 | [Docker Desktop](https://www.docker.com/products/docker-desktop/) | opcional | Base de datos local | `docker --version` |
 
-En Windows, al instalar Python marca la casilla **"Add python.exe to PATH"**.
-
-Docker es opcional: si no lo instalas, trabajas directamente contra la base en Neon (Paso 5, opción B).
+En Windows, al instalar Python marca la casilla **"Add python.exe to PATH"**. Docker es opcional: sin él se trabaja directo contra Neon (Paso 5, opción B).
 
 ---
 
 ## Paso 2 · Crear el repositorio en GitHub (solo UNA persona del equipo)
 
-1. Descomprime `inmobiliaria.zip` en tu carpeta de proyectos.
-2. En [github.com/new](https://github.com/new) crea un repositorio **privado** llamado `inmobiliaria`, **sin** README ni `.gitignore` (ya vienen en esta base).
-3. En una terminal, dentro de la carpeta `inmobiliaria`:
+1. En [github.com/new](https://github.com/new) crea un repositorio **privado** llamado `inmobiliaria`, **sin** README ni `.gitignore`.
+2. Dentro de la carpeta del proyecto:
 
    ```bash
    git init
    git add .
-   git commit -m "Base del proyecto: estructura, base de datos, pipeline, API y frontend"
+   git commit -m "Base del proyecto"
    git branch -M main
    git remote add origin https://github.com/<usuario-u-organizacion>/inmobiliaria.git
    git push -u origin main
    ```
 
-4. En GitHub: **Settings → Collaborators → Add people**, y agrega a los 5 integrantes.
-5. Revisa la pestaña **Actions**: el CI debe aparecer en verde en unos minutos.
+3. En GitHub: **Settings → Collaborators → Add people**, y agrega al equipo.
+4. Revisa la pestaña **Actions**: el CI debe quedar en verde.
+
+`scrapers/property_search/` no debe tener una carpeta `.git` propia (un repositorio dentro de otro). Si la tiene, bórrala antes del primer commit.
 
 ---
 
@@ -81,13 +97,13 @@ git clone https://github.com/<usuario-u-organizacion>/inmobiliaria.git
 cd inmobiliaria
 ```
 
-Todos los comandos siguientes se corren desde esta carpeta (la raíz del repositorio), salvo que se indique otra.
+Todos los comandos siguientes se corren desde esta carpeta (la raíz), salvo que se indique otra.
 
 ---
 
 ## Paso 4 · Crear el entorno de Python
 
-El entorno virtual (`.venv`) aísla las librerías del proyecto. Se crea una vez y se **activa cada vez** que abres una terminal nueva.
+Se crea una vez y se **activa cada vez** que abres una terminal nueva.
 
 **Windows (PowerShell):**
 
@@ -98,7 +114,7 @@ python -m pip install --upgrade pip
 pip install -r requirements-dev.txt
 ```
 
-Si PowerShell dice que la ejecución de scripts está deshabilitada, corre una vez `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` y vuelve a activar.
+Si PowerShell bloquea la activación, corre una vez `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
 **Mac / Linux:**
 
@@ -109,13 +125,13 @@ python -m pip install --upgrade pip
 pip install -r requirements-dev.txt
 ```
 
-Sabes que el entorno está activo porque la terminal muestra `(.venv)` al inicio de la línea.
+La terminal muestra `(.venv)` al inicio cuando el entorno está activo.
 
 ---
 
 ## Paso 5 · Configurar la base de datos
 
-Primero crea tu archivo de configuración a partir del ejemplo:
+Crea tu archivo de configuración a partir del ejemplo:
 
 ```bash
 cp .env.example .env        # Mac / Linux
@@ -126,30 +142,33 @@ El `.env` tiene claves: **nunca se sube a GitHub** (ya está en `.gitignore`).
 
 ### Opción A · Base local con Docker (recomendada para programar)
 
-Cada integrante tiene su propia base y puede romperla sin afectar al resto.
-
 ```bash
 docker compose up -d
 ```
 
-La primera vez, el contenedor crea las tablas y carga portales y comunas automáticamente. El `DATABASE_URL` que viene en `.env.example` ya apunta a esta base: no hay que cambiar nada.
-
-Para borrar todo y empezar de cero: `docker compose down -v` y luego `docker compose up -d`.
+La primera vez carga automáticamente todos los archivos de `db/` (tablas, comunas y portales). El `DATABASE_URL` de `.env.example` ya apunta a esta base. Para empezar de cero: `docker compose down -v` y luego `docker compose up -d`.
 
 ### Opción B · Base en Neon (la compartida del equipo)
 
-Neon es la base que usarán la API desplegada y la ejecución diaria de los scrapers. **Solo una persona la crea**; al resto se le comparte la cadena de conexión por un canal privado (nunca en el repositorio).
+Neon es la base que usarán la API desplegada y la ejecución diaria. **Solo una persona la crea** y comparte la cadena de conexión por un canal privado.
 
-1. Crea una cuenta en [neon.tech](https://neon.tech) (plan gratuito) y un proyecto llamado `inmobiliaria`, con PostgreSQL 16 y la región más cercana disponible.
-2. En el panel, copia la **Connection string** (empieza con `postgresql://` y termina en `?sslmode=require`).
-3. Pégala en tu `.env` como `DATABASE_URL=...` (y comenta la línea de Docker).
-4. Crea las tablas:
+1. Crea una cuenta en [neon.tech](https://neon.tech) y un proyecto `inmobiliaria` con PostgreSQL 16.
+2. Copia la **Connection string** (termina en `?sslmode=require`) y pégala en tu `.env` como `DATABASE_URL=...`.
+3. Crea las tablas:
 
    ```bash
    python scripts/init_db.py
    ```
 
-   Si la base ya tiene tablas, el script no hace nada. Para borrar todo y recrearla: `python scripts/init_db.py --reset` (pide confirmación).
+### Actualizar una base que ya existe
+
+Cuando se agregan datos iniciales nuevos (por ejemplo, el portal TocToc en `db/03_portales_extra.sql`), basta con volver a correr:
+
+```bash
+python scripts/init_db.py
+```
+
+Si la base ya tiene tablas, no borra nada: solo carga lo que falte. Para borrar todo y recrearla: `python scripts/init_db.py --reset` (pide confirmación).
 
 ---
 
@@ -159,19 +178,15 @@ Neon es la base que usarán la API desplegada y la ejecución diaria de los scra
 python scripts/check_setup.py
 ```
 
-Debe terminar así:
+Debe terminar con:
 
 ```
-[OK]    Python: 3.12.x
-[OK]    Paquetes instalados: scrapy, pydantic, psycopg, fastapi, python-dotenv
-[OK]    Archivo .env con DATABASE_URL: localhost:5432/inmobiliaria
-[OK]    Conexión a la base: PostgreSQL 16.x
-[OK]    Tablas y datos iniciales: 12 tablas, 3 portales, 52 comunas
+[OK]    Tablas y datos iniciales: 12 tablas, 4 portales, 52 comunas
 
 Todo listo para empezar a programar.
 ```
 
-Y las pruebas deben pasar:
+Y las pruebas deben pasar (no necesitan internet; las de la API se saltan si no hay base):
 
 ```bash
 pytest
@@ -179,51 +194,81 @@ pytest
 
 ---
 
-## Paso 7 · Levantar cada pieza
+## Paso 7 · Correr los scrapers
 
-### Scrapers
+### Chilepropiedades (Scrapy)
 
 ```bash
 cd scrapers
-scrapy list                                   # debe mostrar: chilepropiedades
+scrapy crawl chilepropiedades -a max_paginas=2     # corrida corta, ~20 avisos
+scrapy crawl chilepropiedades                      # corrida completa (marca bajas al final)
 ```
 
-**Antes de la primera corrida real**, verifica los selectores del spider de Chilepropiedades contra el HTML real (se escribieron sin poder probarlos contra el sitio):
+El spider lee primero los **datos estructurados JSON-LD** de cada ficha (precio, moneda, dormitorios, baños, superficies, gastos comunes, fecha). Solo si falta algo usa los rótulos del HTML. La descripción completa sale del contenedor `.clp-description-box`, porque la del JSON-LD viene recortada.
+
+### TocToc (property_search)
+
+Desde la raíz:
 
 ```bash
-scrapy shell "https://chilepropiedades.cl/ver-publicacion/arriendo-mensual/nunoa/departamento/vicuna-mackenna-660/137904440"
+python scrapers/cargar_property_search.py --operation arriendo --type departamento --max-pages 2
 ```
 
-Dentro del shell, prueba por ejemplo `response.xpath("//h1//text()").getall()` y ajusta `_valor()` o los XPath en `spiders/chilepropiedades.py` si algún campo sale vacío. Mientras ajustas, pon `HTTPCACHE_ENABLED = True` en `settings.py` para no descargar las mismas páginas una y otra vez.
+Acepta los mismos argumentos que `scrapers/property_search/main.py` (`--commune`, `--bedrooms`, `--price`, `--currency`, `--url-only`, etc.), más `--marcar-bajas`, que sirve cuando la búsqueda cubre todo el portal. Ejemplos de filtros en el docstring de `property_search/main.py`.
 
-Luego, una corrida corta de 2 páginas (~20 avisos):
+`property_search/` se usa sin modificarlo. El adaptador solo convierte cada `Listing` al formato común y lo guarda con `core/guardado.py`:
+
+| `Listing` (property_search) | `publicacion` (nuestra base) | Nota |
+| --- | --- | --- |
+| `listing_id`, `url`, `title`, `description` | `id_externo`, `url`, `titulo`, `descripcion` | La URL relativa se completa con el dominio |
+| `price_clp`, `price_uf`, `price_currency` | `precio_clp`, `precio_uf`, `precio_monto` + `precio_moneda` | |
+| `operation`, `property_type` | `operacion`, `tipo_propiedad` | Se pasan a minúscula |
+| `bedrooms`, `bathrooms` (listas) | `dormitorios`, `banos` | En proyectos con varias tipologías se toma el menor |
+| `area_m2` | `m2_util` | Igual que el filtro `superficie-util` de TocToc |
+| `hours_published` | `fecha_publicacion` | Se calcula restando las horas a la fecha actual |
+| `commune`, `lat`, `lon` | `comuna_id`, `latitud`, `longitud` | |
+| `broker`, `flags` | — | No se guardan; los `flags` se muestran al final de la corrida |
+
+**Descarga (decisión pendiente del equipo):** por ahora TocToc se descarga con el `fetch()` original de `property_search`, que usa `curl_cffi` con `impersonate="chrome"` (por eso `curl_cffi` está en `requirements.txt`). El adaptador trae una alternativa, `DescargaHonesta`: User-Agent del proyecto y respeto de robots.txt. Está desactivada con una línea comentada en `main()` (`# buscador.fetch = descarga`). Para activarla, descomenta esa línea. Antes del cierre de la Entrega 2, el equipo debe decidir cuál se usa y dejarlo registrado en el plan de riesgos, que hoy dice "rotación de proxies".
+
+### Los dos a la vez y cómo revisar el resultado
+
+Se pueden correr al mismo tiempo, en dos terminales: cada uno registra su propia ejecución.
 
 ```bash
-scrapy crawl chilepropiedades -a max_paginas=2
+python scripts/resumen.py
 ```
 
-Al final el log muestra un resumen como `Ejecución 1 (parcial): 20 leídos, 19 ok (95.0%)...`. También puedes revisarlo en la base:
+Ejemplo de salida:
 
-```sql
-SELECT * FROM v_tasa_exito_scraping ORDER BY inicio DESC;
-SELECT tipo, url, mensaje FROM error_scraping ORDER BY id DESC LIMIT 20;
+```
+portal             activos  última ejecución       sin error
+chilepropiedades        20  #3 parcial            100.0% (20/20)
+yapo                     0  nunca                          -
+economicos               0  nunca                          -
+toctoc                  48  #2 parcial            97.9% (47/48)
+
+Últimos errores:
+  [toctoc] validacion: 1 validation error for AvisoNormalizado precio_monto ...
 ```
 
-Una corrida **sin** `max_paginas` recorre todo el portal y, al terminar, marca como inactivos los avisos que ya no aparecen.
+- **parcial** = se limitaron las páginas, o hubo algún aviso con error. Es lo esperado en corridas cortas.
+- **sin error** = la métrica del Acta: la meta es **≥ 95%**.
+- Para ver el detalle, consulta en la base `SELECT * FROM error_scraping ORDER BY id DESC;`.
 
-### API
+---
 
-Desde la raíz del repositorio:
+## Paso 8 · API y frontend
+
+**API** (desde la raíz):
 
 ```bash
 uvicorn api.main:app --reload
 ```
 
-Abre [http://localhost:8000/docs](http://localhost:8000/docs): ahí se pueden probar todos los endpoints.
+Documentación interactiva en [http://localhost:8000/docs](http://localhost:8000/docs).
 
-### Frontend
-
-En otra terminal:
+**Frontend** (en otra terminal):
 
 ```bash
 cd web
@@ -232,27 +277,60 @@ cp .env.example .env.local     # Windows: copy .env.example .env.local
 npm run dev
 ```
 
-Abre [http://localhost:5173](http://localhost:5173). La página muestra los avisos que haya en la base, con filtros y el enlace al aviso original. Necesita la API corriendo.
+Abre [http://localhost:5173](http://localhost:5173). Deben aparecer avisos de ambos portales, cada uno con su botón "Ver aviso original en …".
+
+---
+
+## Validaciones que protegen la base
+
+Todo aviso pasa por `AvisoNormalizado` (`core/modelos.py`) antes de guardarse. Si falla, queda en `error_scraping` y baja el % sin error, en vez de llegar a la página:
+
+- **Datos personales:** teléfonos, correos, RUT y nombres tras "Agente:" o "Contacto:" se reemplazan por `[telefono]`, `[correo]`, `[rut]` y `[nombre]`.
+- **Precios imposibles:** arriendo entre $50.000 y $20 millones, o entre 1 y 500 UF; venta entre $5 millones y $50.000 millones, o entre 200 y 1.000.000 UF. Esto atrapa errores de lectura, como confundir pesos con UF.
+- **Campos básicos:** URL válida, precio mayor que cero, dormitorios y baños entre 0 y 20, portal conocido.
+
+Los números se leen a la chilena (`core/normalizacion.py`): `"$ 550.000"` → 550000, `"UF 13,35"` → 13.35, `"1.200 m²"` → 1200 y `"37.00 m²"` → 37. De un texto con varios precios se toma solo el **primero** con su propio símbolo, así la "UF de referencia" que muestran algunos portales no cambia la moneda.
+
+---
+
+## Cómo agregar un portal nuevo (Yapo, Economicos)
+
+Primero revisa si la página trae **datos estructurados**: es más confiable leerlos que adivinar a partir del HTML. En el navegador, con "Ver código fuente", busca:
+- `__NEXT_DATA__`, un JSON de sitios hechos con Next.js, como TocToc y Yapo;
+- `application/ld+json`, el JSON-LD de schema.org, como Chilepropiedades.
+
+Hay dos caminos, y los dos terminan en la misma base:
+
+**A. Como clase de `property_search`** (lo más natural si las páginas de **listado** traen todos los datos, como con `__NEXT_DATA__`):
+1. Crea `scrapers/property_search/search/sites/YapoSearch.py`, que herede de `PropertySearch` e implemente `build_url()` y `extract()` (ver `TocTocSearch.py`).
+2. Regístrala en `SearchFactory._REGISTRY`.
+3. Agrega el portal a `db/03_portales_extra.sql` si no está, y corre `python scripts/init_db.py`.
+4. Prueba: `python scrapers/cargar_property_search.py --site yapo --operation arriendo --type departamento --max-pages 2`.
+
+**B. Como spider de Scrapy** (lo más natural si hay que entrar a la **ficha** de cada aviso, como en Chilepropiedades):
+1. Copia `spiders/chilepropiedades.py` como `spiders/yapo.py`, y cambia `name` (igual al `codigo` de la tabla `portal`) y `allowed_domains`.
+2. Ajusta la URL del listado, la paginación y la lectura de la ficha. Devuelve un diccionario con los campos de `AvisoNormalizado`.
+3. Prueba: `scrapy crawl yapo -a max_paginas=2`.
+
+En los dos casos: guarda una página real en `tests/fixtures/` y escribe una prueba como las de `tests/test_chilepropiedades.py`.
+
+### Guardar páginas para pruebas
+
+Usa **"Guardar como → Página web, solo HTML"** del navegador. **No uses** `scrapy fetch ... > archivo.html` en PowerShell: la redirección con `>` cambia la codificación y daña los acentos ("cómodo" queda como "c├│modo").
 
 ---
 
 ## Cómo trabajamos en equipo
 
-- **Nunca se trabaja directo en `main`.** Cada tarea va en su rama: `git checkout -b scraper-yapo`, y se integra con un Pull Request que otra persona revisa.
+- **Nunca se trabaja directo en `main`.** Cada tarea va en su rama (`git checkout -b scraper-yapo`) y se integra con un Pull Request que otra persona revisa.
 - El CI corre en cada Pull Request; si está en rojo, se arregla antes de integrar.
-- Cada integrante trabaja principalmente en su carpeta: `scrapers/` y `core/` (backend e IA), `api/`, `web/` (frontend).
-- **El contrato entre todos es `core/modelos.py`** (formato del aviso) **y `db/01_schema.sql`** (tablas). Si cambias uno, cambia el otro en el mismo Pull Request y avísale al equipo.
+- **El contrato entre todos es `core/modelos.py`** (formato del aviso) **y `db/01_schema.sql`** (tablas). Si cambias uno, cambia el otro en el mismo Pull Request y avisa al equipo.
+- `scrapers/property_search/` lo mantiene su autor. El estilo del CI (`ruff`) no lo revisa.
 - Nunca subas el `.env`, claves ni cadenas de conexión.
 
-## Cómo agregar un portal nuevo (Yapo, Economicos)
+**Reglas de datos acordadas** (revisión legal 2.1.3): solo páginas públicas y sin login; pausa de 2 segundos entre requests; no guardar nombre, teléfono, correo ni RUT del publicante; no republicar fotos ni descripciones completas en la web (solo un extracto y siempre el enlace al aviso original). La forma de descargar TocToc está pendiente (ver Paso 7).
 
-1. Copia `scrapers/inmobiliaria_scrapers/spiders/chilepropiedades.py` como `yapo.py`.
-2. Cambia `name` (debe ser igual al `codigo` de la tabla `portal`: `yapo` o `economicos`) y `allowed_domains`.
-3. Ajusta la URL del listado, cómo se pasa de página y cómo se lee la ficha. En Yapo, revisa primero si la página trae los datos en `<script id="__NEXT_DATA__">`: leer ese JSON es más fácil y estable que el HTML.
-4. Devuelve un diccionario con los campos de `AvisoNormalizado`. El pipeline se encarga del resto: validar, limpiar datos personales, convertir precios, guardar y contar.
-5. Prueba con `scrapy crawl yapo -a max_paginas=2`.
-
-**Reglas que no se cambian** (revisión legal 2.1.3): respetar robots.txt, mantener la pausa de 2 segundos, no leer bloques de contacto y, si un portal bloquea, dejarlo: nunca usar proxies, resolver captchas ni camuflar el navegador.
+---
 
 ## Despliegue (para la demo)
 
@@ -262,15 +340,30 @@ Abre [http://localhost:5173](http://localhost:5173). La página muestra los avis
 | API | [Render](https://render.com) → New → Web Service desde el repositorio | Build: `pip install -r requirements.txt` · Start: `uvicorn api.main:app --host 0.0.0.0 --port $PORT` · Variables: `DATABASE_URL`, `CORS_ORIGINS` (la URL del frontend) |
 | Frontend | [Vercel](https://vercel.com) o Netlify, desde el repositorio | Carpeta raíz: `web` · Variable: `VITE_API_URL` (la URL de Render) |
 
+---
+
+## Pendientes conocidos
+
+- **Tercer portal:** Yapo (tiene `__NEXT_DATA__`) o Economicos.
+- **Paginación de Chilepropiedades:** las fichas se verificaron contra una página real, pero el listado (`/0`, `/1`, …) todavía no. Hay que confirmarlo en la primera corrida real.
+- **Superficie de TocToc en la web:** TocToc guarda `m2_util` y la tarjeta muestra solo `m2_total`. Para mostrarla, en `web/src/App.tsx` usa `a.m2_total ?? a.m2_util` y agrega `m2_util: string | null` al tipo `Aviso` en `web/src/api.ts`.
+- **Decisión de descarga de TocToc** y su registro en el plan de riesgos (Paso 7).
+- **Si alcanza:** detección de duplicados entre portales (`duplicado_de`) y ejecución diaria con GitHub Actions.
+
+---
+
 ## Problemas comunes
 
 | Síntoma | Solución |
 | --- | --- |
-| `[FALTA] Archivo .env con DATABASE_URL` | No copiaste `.env.example` a `.env`, o la corres fuera de la raíz del repositorio. |
+| `[FALTA] Archivo .env con DATABASE_URL` | No copiaste `.env.example` a `.env`, o lo corres fuera de la raíz. |
 | `connection refused` en `localhost:5432` | Docker no está corriendo: abre Docker Desktop y corre `docker compose up -d`. |
-| El puerto 5432 está ocupado | Ya tienes otro PostgreSQL instalado. En `docker-compose.yml` cambia `"5432:5432"` por `"5433:5432"` y en `.env` usa `localhost:5433`. |
-| `faltan [...]; corre python scripts/init_db.py` | La base existe pero está vacía. Corre el script. |
-| `ModuleNotFoundError: No module named 'core'` | Corre la API desde la raíz y Scrapy desde `scrapers/`, con el entorno virtual activo. |
-| Scrapy dice `Forbidden by robots.txt` | Es el comportamiento correcto: esa URL no se puede visitar. No desactives `ROBOTSTXT_OBEY`. |
-| Un campo del aviso sale siempre vacío | El selector no calza con el HTML real: revísalo con `scrapy shell`. |
+| El puerto 5432 está ocupado | En `docker-compose.yml` cambia `"5432:5432"` por `"5433:5432"` y en `.env` usa `localhost:5433`. |
+| `El portal 'toctoc' no está en la tabla portal` | La base es anterior a TocToc: corre `python scripts/init_db.py`. |
+| `ModuleNotFoundError: No module named 'core'` | Corre la API y el adaptador desde la raíz y Scrapy desde `scrapers/`, con el entorno activo. |
+| TocToc: `Ejecución N (fallida)` con `HTTP 403` | El portal rechazó la descarga. Revisa `scripts/resumen.py` y conversa con el equipo antes de cambiar la forma de descargar. |
+| Error `precio fuera de rango` | El precio se leyó mal (por ejemplo, pesos como UF) o el aviso tiene un precio absurdo. Revisa el aviso en `error_scraping`. |
+| Scrapy dice `Forbidden by robots.txt` | Es lo correcto: esa URL no se puede visitar. No desactives `ROBOTSTXT_OBEY`. |
+| Un campo sale siempre vacío | El sitio cambió su estructura: revisa con `scrapy shell "<url>"` y actualiza el fixture y la prueba. |
+| Acentos dañados en un archivo `.html` guardado | Se guardó con `>` en PowerShell. Vuelve a guardarlo con el navegador. |
 | El frontend dice "No se pudo cargar" | La API no está corriendo, o `VITE_API_URL` / `CORS_ORIGINS` no coinciden. |
