@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core.config import RAIZ  # noqa: E402
 from core.db import conectar  # noqa: E402
 
-ARCHIVOS = ["01_schema.sql", "02_comunas.sql"]
+ARCHIVOS = ["01_schema.sql", "02_comunas.sql", "03_portales_extra.sql"]
 
 
 def main() -> None:
@@ -24,7 +24,11 @@ def main() -> None:
     with conectar(autocommit=True) as conn:
         existe = conn.execute("SELECT to_regclass('public.publicacion') AS t").fetchone()["t"]
         if existe and not reset:
-            print("La base ya tiene las tablas. Nada que hacer (usa --reset para recrearla).")
+            # Las tablas ya están: solo se cargan los datos iniciales nuevos (no duplican nada)
+            for nombre in ARCHIVOS[1:]:
+                conn.execute((RAIZ / "db" / nombre).read_text(encoding="utf-8"))
+                print(f"OK  {nombre}")
+            print("La base ya tenía las tablas; datos iniciales al día (--reset para recrearla).")
             return
         if reset:
             respuesta = input("Esto BORRA todos los datos de la base. Escribe 'si' para seguir: ")

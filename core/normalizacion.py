@@ -12,19 +12,27 @@ def slug(texto: str) -> str:
     return re.sub(r"[\s-]+", "-", t).strip("-")
 
 
-def numero(texto: str | None) -> Decimal | None:
-    """Extrae un número de textos chilenos: '$ 580.000' -> 580000, 'UF 14,13' -> 14.13,
-    '55 m²' -> 55. Devuelve None si no hay número."""
-    if texto is None:
-        return None
-    m = re.search(r"\d[\d.]*(?:,\d+)?", str(texto))
-    if not m:
-        return None
-    crudo = m.group(0).replace(".", "").replace(",", ".")
+def _a_decimal(crudo: str) -> Decimal | None:
+    """Interpreta un número escrito a la chilena.
+    Con coma: el punto es de miles ('1.234,5' -> 1234.5).
+    Sin coma: '1.200' o '550.000' son miles; '37.00' o '54.3' son decimales."""
+    if "," in crudo:
+        crudo = crudo.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"\d{1,3}(?:\.\d{3})+", crudo):
+        crudo = crudo.replace(".", "")
     try:
         return Decimal(crudo)
     except InvalidOperation:
         return None
+
+
+def numero(texto: str | None) -> Decimal | None:
+    """Extrae el primer número de un texto: '$ 580.000' -> 580000, 'UF 14,13' -> 14.13,
+    '55 m²' -> 55, '37.00 m²' -> 37.00. Devuelve None si no hay número."""
+    if texto is None:
+        return None
+    m = re.search(r"\d[\d.]*(?:,\d+)?", str(texto))
+    return _a_decimal(m.group(0).rstrip(".")) if m else None
 
 
 def entero(texto: str | None) -> int | None:
@@ -32,15 +40,23 @@ def entero(texto: str | None) -> int | None:
     return int(n) if n is not None else None
 
 
+# Primer precio escrito en un texto: "$ 550.000", "UF 13,35", "US$ 900", "USD 900"
+_PRECIO = re.compile(r"(US\$|USD|UF|\$)\s*(\d[\d.]*(?:,\d+)?)", re.IGNORECASE)
+_MONEDAS = {"$": "CLP", "UF": "UF", "US$": "USD", "USD": "USD"}
+
+
+def precio(texto: str | None) -> tuple[Decimal | None, str | None]:
+    """Devuelve (monto, moneda) del PRIMER precio del texto.
+    '$ 550.000 Valor (UF aprox.) UF 13,35' -> (550000, 'CLP'): la UF de referencia no cuenta."""
+    m = _PRECIO.search(texto or "")
+    if not m:
+        return None, None
+    return _a_decimal(m.group(2).rstrip(".")), _MONEDAS[m.group(1).upper()]
+
+
 def moneda_de(texto: str) -> str:
-    """Detecta la moneda de un precio escrito.
-    'UF 25' -> 'UF', 'US$ 900' -> 'USD', '$ 580.000' -> 'CLP'."""
-    t = texto.upper()
-    if "UF" in t:
-        return "UF"
-    if "US" in t or "USD" in t:
-        return "USD"
-    return "CLP"
+    """Moneda del primer precio del texto: 'UF 25' -> 'UF', 'US$ 900' -> 'USD', '$ 580' -> 'CLP'."""
+    return precio(texto)[1] or "CLP"
 
 
 def a_clp(

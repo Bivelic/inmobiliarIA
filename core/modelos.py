@@ -62,6 +62,24 @@ class AvisoNormalizado(BaseModel):
         return limpiar_datos_personales(v)
 
     @model_validator(mode="after")
+    def _precio_plausible(self):
+        """Rechaza precios imposibles: casi siempre son un error de lectura (ej. leer
+        '$ 550.000' como 550.000 UF). El aviso queda en error_scraping para revisarlo."""
+        limites = {  # (mínimo, máximo) por operación y moneda
+            ("arriendo", "CLP"): (50_000, 20_000_000),
+            ("arriendo", "UF"): (1, 500),
+            ("venta", "CLP"): (5_000_000, 50_000_000_000),
+            ("venta", "UF"): (200, 1_000_000),
+        }
+        rango = limites.get((self.operacion, self.precio_moneda))
+        if rango and not rango[0] <= self.precio_monto <= rango[1]:
+            raise ValueError(
+                f"precio fuera de rango para {self.operacion} en {self.precio_moneda}: "
+                f"{self.precio_monto} (esperado entre {rango[0]} y {rango[1]})"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _m2_coherentes(self):
         if self.m2_util and self.m2_total and self.m2_util > self.m2_total * Decimal("1.5"):
             # Probable error del publicante: se conserva el total y se descarta el útil

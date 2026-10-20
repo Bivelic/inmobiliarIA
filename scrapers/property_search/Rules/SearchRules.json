@@ -1,0 +1,17 @@
+[
+    {
+    "site": "toctoc",
+    "base": {"protocol": "https", "subdomain": "www", "domain": "toctoc", "extension": "com"},
+    "path": ["operation", "property_type", "region", "commune", "neighborhood"],
+    "params": {
+        "bedrooms": {"key": "dormitorios", "type": "range"},
+        "bathrooms": {"key": "bannos", "type": "range"},
+        "price": {"key": "precios", "type": "range", "requires": {"key": "moneda", "values": ["UF", "CLP"]}},
+        "area_util": {"key": "superficie-util", "type": "range"},
+        "published_within_days": {"key": "fecha-publicacion", "type": "scalar", "allowed": [1, 7, 30]},
+        "page": {"key": "pagina", "type": "scalar", "start": 1}
+    },
+    "range": {"format": "{min},{max}", "no_min": 0, "no_max": "x"},
+    "extractor": {"type": "next_data", "path": "props.pageProps.propiedades.results"}
+    }
+]
