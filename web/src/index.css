@@ -1,4 +1,3 @@
-/* Estilos mínimos de la Entrega 2; la interfaz final la diseña el equipo de UX/UI. */
 :root {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: #1d2433;
@@ -28,4 +27,15 @@ header p { margin: 0 0 24px; color: #5b6475; }
   .avisos li { background: #1b2029; border-color: #2c3340; }
   .filtros select, .filtros input { background: #1b2029; color: inherit; border-color: #3a4252; }
   .avisos a { color: #7aa7ff; }
+}
+
+.cargar-mas {
+  display: block; margin: 8px auto 0; padding: 10px 20px; font-size: 15px; font-weight: 600;
+  border: 1px solid #c9ced8; border-radius: 6px; background: #fff; color: #1a5fd0; cursor: pointer;
+}
+.cargar-mas:hover:not(:disabled) { background: #eef3fd; }
+.cargar-mas:disabled { color: #8a93a3; cursor: default; }
+@media (prefers-color-scheme: dark) {
+  .cargar-mas { background: #1b2029; border-color: #3a4252; color: #7aa7ff; }
+  .cargar-mas:hover:not(:disabled) { background: #232a36; }
 }

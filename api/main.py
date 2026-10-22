@@ -39,6 +39,13 @@ DESDE = """
     LEFT JOIN comuna c ON c.id = p.comuna_id
 """
 
+# Órdenes permitidos. El id al final deja el orden estable entre páginas ("Cargar más").
+ORDENES = {
+    "recientes": "p.fecha_publicacion DESC NULLS LAST, p.primera_vez_visto DESC, p.id DESC",
+    "precio_asc": "p.precio_clp ASC NULLS LAST, p.id DESC",
+    "precio_desc": "p.precio_clp DESC NULLS LAST, p.id DESC",
+}
+
 
 @app.get("/health")
 def health():
@@ -54,10 +61,11 @@ def listar_publicaciones(
     comuna: str | None = Query(None, description="slug de la comuna, ej. 'nunoa'"),
     precio_max: int | None = Query(None, ge=0, description="precio máximo en CLP"),
     dormitorios_min: int | None = Query(None, ge=0),
+    orden: Literal["recientes", "precio_asc", "precio_desc"] = "recientes",
     limite: int = Query(20, ge=1, le=100),
-    desde: int = Query(0, ge=0),
+    desde: int = Query(0, ge=0, description="cuántos resultados saltar (para 'Cargar más')"),
 ):
-    """Avisos activos y no duplicados, con filtros tradicionales."""
+    """Avisos activos y no duplicados, con filtros tradicionales, orden y paginación."""
     condiciones = ["p.activa", "p.duplicado_de IS NULL", "p.operacion = %(operacion)s"]
     params: dict = {"operacion": operacion, "limite": limite, "desde": desde}
     if comuna:
@@ -75,7 +83,7 @@ def listar_publicaciones(
         total = conn.execute(f"SELECT count(*) AS n {DESDE} WHERE {donde}", params).fetchone()["n"]
         filas = conn.execute(
             f"SELECT {CAMPOS} {DESDE} WHERE {donde} "
-            "ORDER BY p.ultima_vez_visto DESC, p.id DESC LIMIT %(limite)s OFFSET %(desde)s",
+            f"ORDER BY {ORDENES[orden]} LIMIT %(limite)s OFFSET %(desde)s",
             params,
         ).fetchall()
     return {"total": total, "resultados": filas}

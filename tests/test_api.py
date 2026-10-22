@@ -49,3 +49,12 @@ def test_metricas(cliente):
     r = cliente.get("/metricas")
     assert r.status_code == 200
     assert {m["portal"] for m in r.json()} >= {"chilepropiedades", "yapo", "economicos"}
+
+
+@pytest.mark.parametrize("orden", ["recientes", "precio_asc", "precio_desc"])
+def test_ordenes_validos(cliente, orden):
+    assert cliente.get("/publicaciones", params={"orden": orden}).status_code == 200
+
+
+def test_orden_invalido(cliente):
+    assert cliente.get("/publicaciones", params={"orden": "x; DROP TABLE"}).status_code == 422
