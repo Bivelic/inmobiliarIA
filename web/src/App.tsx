@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { buscarAvisos, listarComunas, type Aviso, type Comuna, type Filtros, type Orden } from './api'
+
+// Filtros que se editan en el formulario y solo se aplican al apretar "Buscar".
+// "orden" queda fuera: cambiar el orden sigue buscando al tiro.
+type Borrador = Omit<Filtros, 'orden'>
 
 const pesos = (v: string | null) =>
   v ? `$${Number(v).toLocaleString('es-CL', { maximumFractionDigits: 0 })}` : 'Sin precio'
@@ -10,7 +14,8 @@ const superficie = (a: Aviso) => {
 }
 
 export default function App() {
-  const [filtros, setFiltros] = useState<Filtros>({ orden: 'recientes' })
+  const [filtros, setFiltros] = useState<Filtros>({ orden: 'recientes' }) // los filtros YA aplicados
+  const [borrador, setBorrador] = useState<Borrador>({}) // lo que hay escrito en el formulario
   const [comunas, setComunas] = useState<Comuna[]>([])
   const [avisos, setAvisos] = useState<Aviso[]>([])
   const [total, setTotal] = useState(0)
@@ -22,6 +27,7 @@ export default function App() {
     listarComunas().then(setComunas).catch(() => setComunas([]))
   }, [])
 
+  // Llama a GET /publicaciones al cargar la página y cada vez que cambian los filtros aplicados.
   useEffect(() => {
     let vigente = true 
     setCargando(true)
@@ -41,7 +47,7 @@ export default function App() {
 
   const cargarMas = () => {
     setCargandoMas(true)
-    buscarAvisos(filtros, avisos.length)
+    buscarAvisos(filtros, avisos.length) // usa los filtros aplicados, no el borrador
       .then((r) => {
         setAvisos((actuales) => {
           const vistos = new Set(actuales.map((a) => a.id))
@@ -53,8 +59,15 @@ export default function App() {
       .finally(() => setCargandoMas(false))
   }
 
-  const cambiar = (campo: keyof Filtros) => (e: { target: { value: string } }) =>
-    setFiltros((f) => ({ ...f, [campo]: e.target.value || undefined }))
+  // Escribir en el formulario solo actualiza el borrador, no llama a la API.
+  const cambiar = (campo: keyof Borrador) => (evento: { target: { value: string } }) =>
+    setBorrador((previo) => ({ ...previo, [campo]: evento.target.value || undefined }))
+
+  // Aplicar el borrador crea un objeto nuevo, así que siempre dispara la búsqueda (también sirve de "refrescar").
+  const buscar = (evento: FormEvent) => {
+    evento.preventDefault()
+    setFiltros((previo) => ({ ...previo, ...borrador }))
+  }
 
   const quedan = total - avisos.length
 
@@ -65,7 +78,7 @@ export default function App() {
         <p>Departamentos en arriendo de varios portales inmobiliarios en un solo lugar.</p>
       </header>
 
-      <section className="filtros">
+      <form className="filtros" onSubmit={buscar}>
         <label>
           Comuna
           <select onChange={cambiar('comuna')} defaultValue="">
@@ -96,7 +109,10 @@ export default function App() {
             <option value="precio_desc">Precio: mayor a menor</option>
           </select>
         </label>
-      </section>
+        <button type="submit" className="buscar" disabled={cargando}>
+          {cargando ? 'Buscando…' : 'Buscar'}
+        </button>
+      </form>
 
       {error && <p className="error">No se pudo cargar: {error}</p>}
       <p className="total">
