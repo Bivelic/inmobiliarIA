@@ -4,6 +4,7 @@ from typing import List
 
 from .PropertySearch import PropertySearch
 from search.sites.TocTocSearch import TocTocSearch
+from search.sites.YapoSearch import YapoSearch
 
 
 class SearchFactory:
@@ -15,6 +16,7 @@ class SearchFactory:
 
     _REGISTRY = {
         TocTocSearch.name: TocTocSearch,
+        YapoSearch.name : YapoSearch
     }
 
     @classmethod
