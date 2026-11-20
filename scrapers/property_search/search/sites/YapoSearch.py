@@ -66,7 +66,8 @@ class YapoSearch(PropertySearch):
             parts.append(f"time.{filters.published_within_days}")
 
         category = f"bienes-raices-{operation}-{prop_type}" + (f".{page}" if page > 1 else "")
-        url = f"{self.BASE}/{category}/region-{self.slugify(filters.region)}-{self.slugify(filters.commune)}"
+        place = self.slugify(filters.region) + (f"-{self.slugify(filters.commune)}" if filters.commune else "")
+        url = f"{self.BASE}/{category}/region-{place}"  # sin comuna: toda la region
         if parts:
             url += "?q=" + quote("|".join(parts), safe="._-")  # '|' va como %7C
         return url
