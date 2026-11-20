@@ -17,11 +17,15 @@ inmobiliaria/
 │   ├── limpieza.py             Quita teléfonos, correos, RUT y nombres de las descripciones
 │   ├── normalizacion.py        Precios, números y comunas al formato común
 │   ├── guardado.py             Guarda los avisos: inserta/actualiza, errores, conteos y bajas
-│   └── indicadores.py          Valor de la UF del día
+│   ├── indicadores.py          Valor de la UF del día
+│   ├── buscador.py             Búsqueda y orden por relevancia (docs/BUSCADOR.md)
+│   ├── leads.py                Solicitudes de contacto y correo a Aurora (Resend)
+│   └── ia/                     Extracción de atributos con IA (docs/IA_EXTRACCION.md)
 ├── db/
 │   ├── 01_schema.sql           Las 12 tablas, vistas de métricas y portales iniciales
 │   ├── 02_comunas.sql          Las 52 comunas de la Región Metropolitana
-│   └── 03_portales_extra.sql   Portales agregados después (TocToc)
+│   ├── 03_portales_extra.sql   Portales agregados después (TocToc)
+│   └── 04_atributos.sql        Catálogo de atributos que busca la IA (provisorio)
 ├── scrapers/
 │   ├── inmobiliaria_scrapers/  Proyecto Scrapy
 │   │   ├── settings.py         Reglas de cortesía: robots.txt, pausa de 2 s, User-Agent honesto
@@ -31,12 +35,16 @@ inmobiliaria/
 │   │       └── chilepropiedades.py  Lee el JSON-LD de cada ficha (verificado 20/10)
 │   ├── property_search/        SIN modificar (TocToc)
 │   └── cargar_property_search.py  Adaptador: corre property_search y guarda en la base
-├── api/main.py                 API FastAPI: /publicaciones, /comunas, /metricas, /health
+├── api/main.py                 API FastAPI: /buscar, /leads, /publicaciones, /atributos, /metricas
 ├── web/                        Frontend React + TypeScript + Vite
 ├── scripts/
 │   ├── init_db.py              Crea las tablas o carga los datos iniciales nuevos
 │   ├── check_setup.py          Verifica que todo esté listo
-│   └── resumen.py              Avisos y estado de la última ejecución, por portal
+│   ├── resumen.py              Avisos y estado de la última ejecución, por portal
+│   ├── extraer_atributos.py    Corre la IA sobre los avisos pendientes
+│   ├── plantilla_etiquetado.py CSV para etiquetar a mano el conjunto de validación
+│   ├── evaluar_extraccion.py   Precisión de la IA contra las etiquetas (meta ≥ 80%)
+│   └── evaluar_busquedas.py    Precisión@10 y tiempos de las búsquedas de validación
 ├── tests/                      Pruebas con pytest
 │   └── fixtures/               Páginas guardadas para probar sin conexión
 ├── docker-compose.yml          PostgreSQL 16 local
@@ -281,6 +289,21 @@ Abre [http://localhost:5173](http://localhost:5173). Deben aparecer avisos de am
 
 ---
 
+## Paso 9 · Extracción de atributos con IA
+
+La IA lee la descripción de cada aviso y guarda atributos como "acepta mascotas" o "cerca del metro". Se corre desde tu computador, igual que los scrapers:
+
+```bash
+python scripts/extraer_atributos.py --ver-prompt   # revisa el prompt (no llama a la IA)
+python scripts/extraer_atributos.py --limite 20    # prueba corta
+```
+
+Necesita `GEMINI_API_KEY` y/o `GROQ_API_KEY` en el `.env` (gratis). Todo el detalle, cómo etiquetar el conjunto de validación y cómo medir la precisión están en [docs/IA_EXTRACCION.md](docs/IA_EXTRACCION.md).
+
+El **buscador en lenguaje natural** (`GET /buscar?q=...`) usa esos atributos para ordenar los resultados. Para que interprete el texto en la app desplegada, las mismas claves van en las variables de entorno de Render. Cómo funciona, qué devuelve para la web y cómo medir la Precisión@10: [docs/BUSCADOR.md](docs/BUSCADOR.md).
+
+---
+
 ## Validaciones que protegen la base
 
 Todo aviso pasa por `AvisoNormalizado` (`core/modelos.py`) antes de guardarse. Si falla, queda en `error_scraping` y baja el % sin error, en vez de llegar a la página:
@@ -337,7 +360,7 @@ Usa **"Guardar como → Página web, solo HTML"** del navegador. **No uses** `sc
 | Pieza | Dónde | Configuración |
 | --- | --- | --- |
 | Base | Neon | Paso 5, opción B |
-| API | [Render](https://render.com) → New → Web Service desde el repositorio | Build: `pip install -r requirements.txt` · Start: `uvicorn api.main:app --host 0.0.0.0 --port $PORT` · Variables: `DATABASE_URL`, `CORS_ORIGINS` (la URL del frontend) |
+| API | [Render](https://render.com) → New → Web Service desde el repositorio | Build: `pip install -r requirements.txt` · Start: `uvicorn api.main:app --host 0.0.0.0 --port $PORT` · Variables: `DATABASE_URL`, `CORS_ORIGINS` (la URL del frontend), `GEMINI_API_KEY`, `GROQ_API_KEY`, `IA_PROVEEDORES`, `RESEND_API_KEY`, `LEADS_CORREO_DESTINO` |
 | Frontend | [Vercel](https://vercel.com) o Netlify, desde el repositorio | Carpeta raíz: `web` · Variable: `VITE_API_URL` (la URL de Render) |
 
 ---
@@ -346,7 +369,7 @@ Usa **"Guardar como → Página web, solo HTML"** del navegador. **No uses** `sc
 
 - **Tercer portal:** Yapo (tiene `__NEXT_DATA__`) o Economicos.
 - **Paginación de Chilepropiedades:** las fichas se verificaron contra una página real, pero el listado (`/0`, `/1`, …) todavía no. Hay que confirmarlo en la primera corrida real.
-- **Superficie de TocToc en la web:** TocToc guarda `m2_util` y la tarjeta muestra solo `m2_total`. Para mostrarla, en `web/src/App.tsx` usa `a.m2_total ?? a.m2_util` y agrega `m2_util: string | null` al tipo `Aviso` en `web/src/api.ts`.
+- **Lista oficial de atributos (2.1.1):** `db/04_atributos.sql` es una propuesta provisoria hasta tener la lista priorizada con Aurora.
 - **Decisión de descarga de TocToc** y su registro en el plan de riesgos (Paso 7).
 - **Si alcanza:** detección de duplicados entre portales (`duplicado_de`) y ejecución diaria con GitHub Actions.
 
