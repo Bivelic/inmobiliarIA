@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core.config import RAIZ  # noqa: E402
 from core.db import conectar  # noqa: E402
 
-ARCHIVOS = ["01_schema.sql", "02_comunas.sql", "03_portales_extra.sql"]
+ARCHIVOS = ["01_schema.sql", "02_comunas.sql", "03_portales_extra.sql", "04_atributos.sql"]
 
 
 def main() -> None:
