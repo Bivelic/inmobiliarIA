@@ -16,6 +16,7 @@ class Listing:
     property_type: Optional[str] = None
     region: Optional[str] = None
     commune: Optional[str] = None
+    address: Optional[str] = None
     price_uf: Optional[float] = None
     price_clp: Optional[int] = None
     price_currency: Optional[str] = None  # moneda ORIGINAL del aviso: "UF" | "CLP" (el otro precio es derivado)
