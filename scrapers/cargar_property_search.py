@@ -155,7 +155,11 @@ def main():
     try:
         listings = buscador.search(filtros, max_pages=args.max_pages)
     except Exception as e:  # noqa: BLE001 - la primera página falló: se registra y se cierra
-        ejecucion.error_sin_aviso(buscador.build_url(filtros, 1), "http", repr(e))
+        try:
+            url = buscador.build_url(filtros, 1)
+        except Exception:  # noqa: BLE001 - la URL misma es la que falla: igual se cierra la ejecución
+            url = getattr(buscador, "BASE", "") or buscador.name
+        ejecucion.error_sin_aviso(url, "http", repr(e))
         listings, terminada = [], False
 
     url_base = getattr(buscador, "BASE", "")

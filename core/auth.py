@@ -1,4 +1,4 @@
-"""Autenticación de ejecutivos: hash de contraseñas con scrypt (solo librería estándar) y tokens JWT."""
+"""Autenticación de ejecutivos con contraseñas scrypt y tokens JWT."""
 
 import base64
 import hashlib

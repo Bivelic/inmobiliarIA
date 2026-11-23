@@ -1,4 +1,4 @@
-"""Pruebas del panel de leads. Necesitan una base con db/04_leads_panel.sql cargada; si no hay base, se saltan.
+"""Pruebas del panel de leads con la migración db/04_leads_panel.sql cargada.
 
 Todo lo que crean usa correos @test.invalid y se borra al terminar cada prueba.
 """
@@ -25,7 +25,9 @@ def _hay_base() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _hay_base(), reason="No hay base con la migración db/04_leads_panel.sql")
+pytestmark = pytest.mark.skipif(
+    not _hay_base(), reason="No hay base con la migración db/04_leads_panel.sql"
+)
 
 CLAVE = "clave-de-prueba-123"
 SUFIJO = "@test.invalid"
@@ -48,7 +50,8 @@ def _crear_ejecutivo(activo: bool = True) -> dict:
     email = f"{uuid.uuid4().hex[:10]}{SUFIJO}"
     with conectar() as conn:
         fila = conn.execute(
-            "INSERT INTO ejecutivo (nombre, email, password_hash, activo) VALUES (%s, %s, %s, %s) RETURNING id",
+            "INSERT INTO ejecutivo (nombre, email, password_hash, activo) "
+            "VALUES (%s, %s, %s, %s) RETURNING id",
             ("Ejecutiva de prueba", email, hashear_password(CLAVE), activo),
         ).fetchone()
     return {"id": fila["id"], "email": email}
@@ -78,13 +81,18 @@ def _crear_lead(cliente, **extra) -> int:
     return respuesta.json()["id"]
 
 
-def _lead_con_fechas(creado_local: str, estado: str, minutos_respuesta=None, con_visita: bool = False) -> None:
-    """Inserta un lead con fecha de creación conocida (hora de Chile) para probar los indicadores."""
+def _lead_con_fechas(
+    creado_local: str, estado: str, minutos_respuesta=None, con_visita: bool = False
+) -> None:
+    """Crea un lead con fecha en hora de Chile para probar los indicadores."""
     with conectar() as conn:
         conn.execute(
             """
-            WITH base AS (SELECT (%(creado)s::timestamp AT TIME ZONE 'America/Santiago') AS instante)
-            INSERT INTO lead (nombre, email, consentimiento, estado, creado_en, primera_respuesta_en, visita_agendada_en)
+            WITH base AS (
+                SELECT (%(creado)s::timestamp AT TIME ZONE 'America/Santiago') AS instante
+            )
+            INSERT INTO lead (nombre, email, consentimiento, estado, creado_en,
+                              primera_respuesta_en, visita_agendada_en)
             SELECT 'Lead de prueba', %(email)s, true, %(estado)s::estado_lead_t, instante,
                    CASE WHEN %(minutos)s::int IS NULL THEN NULL
                         ELSE instante + make_interval(mins => %(minutos)s::int) END,
@@ -104,7 +112,13 @@ def _lead_con_fechas(creado_local: str, estado: str, minutos_respuesta=None, con
 # ---------------------------------------------------------------- acceso
 @pytest.mark.parametrize(
     "metodo, ruta",
-    [("get", "/leads"), ("get", "/leads/indicadores"), ("get", "/ejecutivos"), ("get", "/auth/yo"), ("patch", "/leads/1")],
+    [
+        ("get", "/leads"),
+        ("get", "/leads/indicadores"),
+        ("get", "/ejecutivos"),
+        ("get", "/auth/yo"),
+        ("patch", "/leads/1"),
+    ],
 )
 def test_rutas_privadas_exigen_sesion(cliente, metodo, ruta):
     extra = {"json": {"estado": "contactado"}} if metodo == "patch" else {}
@@ -115,7 +129,9 @@ def test_rutas_privadas_exigen_sesion(cliente, metodo, ruta):
 
 def test_login_con_datos_incorrectos_da_el_mismo_error(cliente):
     ejecutivo = _crear_ejecutivo()
-    clave_mala = cliente.post("/auth/login", json={"email": ejecutivo["email"], "password": "otra-clave"})
+    clave_mala = cliente.post(
+        "/auth/login", json={"email": ejecutivo["email"], "password": "otra-clave"}
+    )
     sin_cuenta = cliente.post("/auth/login", json={"email": f"nadie{SUFIJO}", "password": CLAVE})
     assert clave_mala.status_code == sin_cuenta.status_code == 401
     assert clave_mala.json() == sin_cuenta.json()  # no revela si el correo existe
@@ -144,7 +160,9 @@ def test_cambio_de_estado_guarda_fechas_y_historial(cliente, sesion):
 
     descartado = cliente.patch(ruta, json={"estado": "descartado"}, headers=cabeceras).json()
     assert descartado["estado"] == "descartado"
-    assert descartado["primera_respuesta_en"] is None  # descartar sin contactar no cuenta como respuesta
+    assert (
+        descartado["primera_respuesta_en"] is None
+    )  # descartar sin contactar no cuenta como respuesta
 
     contactado = cliente.patch(ruta, json={"estado": "contactado"}, headers=cabeceras).json()
     primera = contactado["primera_respuesta_en"]
@@ -161,7 +179,8 @@ def test_cambio_de_estado_guarda_fechas_y_historial(cliente, sesion):
 
     with conectar() as conn:
         eventos = conn.execute(
-            "SELECT count(*) AS total FROM lead_evento WHERE lead_id = %s AND tipo = 'estado' AND ejecutivo_id = %s",
+            "SELECT count(*) AS total FROM lead_evento "
+            "WHERE lead_id = %s AND tipo = 'estado' AND ejecutivo_id = %s",
             (lead_id, sesion["id"]),
         ).fetchone()["total"]
     assert eventos == 4
@@ -186,17 +205,36 @@ def test_cambios_invalidos(cliente, sesion):
     lead_id = _crear_lead(cliente)
     cabeceras = sesion["cabeceras"]
     assert cliente.patch(f"/leads/{lead_id}", json={}, headers=cabeceras).status_code == 422
-    assert cliente.patch(f"/leads/{lead_id}", json={"estado": "inventado"}, headers=cabeceras).status_code == 422
-    assert cliente.patch(f"/leads/{lead_id}", json={"estado": None}, headers=cabeceras).status_code == 422
-    assert cliente.patch("/leads/999999999", json={"estado": "contactado"}, headers=cabeceras).status_code == 404
+    assert (
+        cliente.patch(
+            f"/leads/{lead_id}", json={"estado": "inventado"}, headers=cabeceras
+        ).status_code
+        == 422
+    )
+    assert (
+        cliente.patch(f"/leads/{lead_id}", json={"estado": None}, headers=cabeceras).status_code
+        == 422
+    )
+    assert (
+        cliente.patch(
+            "/leads/999999999", json={"estado": "contactado"}, headers=cabeceras
+        ).status_code
+        == 404
+    )
 
 
 def test_listado_filtra_por_estado_y_asignacion(cliente, sesion):
     cabeceras = sesion["cabeceras"]
     asignado, libre = _crear_lead(cliente), _crear_lead(cliente)
-    cliente.patch(f"/leads/{asignado}", json={"ejecutivo_id": sesion["id"], "estado": "contactado"}, headers=cabeceras)
+    cliente.patch(
+        f"/leads/{asignado}",
+        json={"ejecutivo_id": sesion["id"], "estado": "contactado"},
+        headers=cabeceras,
+    )
 
-    sin_asignar = cliente.get("/leads", params={"sin_asignar": True, "limite": 100}, headers=cabeceras).json()
+    sin_asignar = cliente.get(
+        "/leads", params={"sin_asignar": True, "limite": 100}, headers=cabeceras
+    ).json()
     ids = {lead["id"] for lead in sin_asignar["resultados"]}
     assert libre in ids and asignado not in ids
 
@@ -219,7 +257,9 @@ def test_indicadores_con_datos_conocidos(cliente, sesion):
 
     cabeceras = sesion["cabeceras"]
     respuesta = cliente.get(
-        "/leads/indicadores", params={"desde": "2001-03-01", "hasta": "2001-03-31"}, headers=cabeceras
+        "/leads/indicadores",
+        params={"desde": "2001-03-01", "hasta": "2001-03-31"},
+        headers=cabeceras,
     ).json()
 
     periodo = respuesta["periodo"]
@@ -237,6 +277,8 @@ def test_indicadores_con_datos_conocidos(cliente, sesion):
     assert anterior["recibidas"] == 0 and anterior["tasa_visitas_pct"] is None
 
     al_reves = cliente.get(
-        "/leads/indicadores", params={"desde": "2001-03-31", "hasta": "2001-03-01"}, headers=cabeceras
+        "/leads/indicadores",
+        params={"desde": "2001-03-31", "hasta": "2001-03-01"},
+        headers=cabeceras,
     )
     assert al_reves.status_code == 422

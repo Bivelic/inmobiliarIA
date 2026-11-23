@@ -1,14 +1,13 @@
 """Panel de leads para ejecutivos de Aurora: login, listado, asignación, estados e indicadores.
 
-Todas las rutas exigen sesión de ejecutivo, salvo POST /auth/login y POST /leads (el formulario público).
+El panel exige sesión de ejecutivo. El inicio de sesión y el formulario quedan públicos.
 """
 
 from datetime import date, timedelta
-from typing import Literal
+from typing import Annotated, Literal
 
-import psycopg
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from pydantic import BaseModel, Field, field_validator
 
 from core.auth import HASH_FALSO, crear_token, leer_token, verificar_password
 from core.db import conectar
@@ -32,7 +31,10 @@ def _rango(columna: str) -> str:
 
 
 # ---------------------------------------------------------------- sesión
-def ejecutivo_actual(authorization: str | None = Header(default=None)) -> dict:
+def ejecutivo_actual(
+    response: Response, authorization: Annotated[str | None, Header()] = None
+) -> dict:
+    response.headers["Cache-Control"] = "no-store"
     esquema, _, token = (authorization or "").partition(" ")
     ejecutivo_id = leer_token(token.strip()) if esquema.lower() == "bearer" else None
     ejecutivo = None
@@ -42,8 +44,13 @@ def ejecutivo_actual(authorization: str | None = Header(default=None)) -> dict:
                 "SELECT id, nombre, email FROM ejecutivo WHERE id = %s AND activo", (ejecutivo_id,)
             ).fetchone()
     if ejecutivo is None:
-        raise HTTPException(401, "Sesión inválida o vencida", headers={"WWW-Authenticate": "Bearer"})
+        raise HTTPException(
+            401, "Sesión inválida o vencida", headers={"WWW-Authenticate": "Bearer"}
+        )
     return ejecutivo
+
+
+SesionEjecutivo = Annotated[dict, Depends(ejecutivo_actual)]
 
 
 class LoginEntrada(BaseModel):
@@ -52,10 +59,12 @@ class LoginEntrada(BaseModel):
 
 
 @router.post("/auth/login")
-def login(datos: LoginEntrada):
+def login(datos: LoginEntrada, response: Response):
+    response.headers["Cache-Control"] = "no-store"
     with conectar() as conn:
         fila = conn.execute(
-            "SELECT id, nombre, email, password_hash FROM ejecutivo WHERE email = lower(%s) AND activo",
+            "SELECT id, nombre, email, password_hash FROM ejecutivo "
+            "WHERE email = lower(%s) AND activo",
             (datos.email.strip(),),
         ).fetchone()
     correcta = verificar_password(datos.password, fila["password_hash"] if fila else HASH_FALSO)
@@ -68,43 +77,49 @@ def login(datos: LoginEntrada):
 
 
 @router.get("/auth/yo")
-def quien_soy(yo: dict = Depends(ejecutivo_actual)):
+def quien_soy(yo: SesionEjecutivo):
     return yo
 
 
 @router.get("/ejecutivos")
-def listar_ejecutivos(yo: dict = Depends(ejecutivo_actual)):
+def listar_ejecutivos(yo: SesionEjecutivo):
     """Ejecutivos activos, para el selector de 'asignar a'."""
     with conectar() as conn:
-        return conn.execute("SELECT id, nombre FROM ejecutivo WHERE activo ORDER BY nombre").fetchall()
+        return conn.execute(
+            "SELECT id, nombre FROM ejecutivo WHERE activo ORDER BY nombre"
+        ).fetchall()
 
 
-# ---------------------------------------------------------------- formulario público
-class LeadEntrada(BaseModel):
+class LeadSinPublicacion(BaseModel):
+    """Solicitudes generales anteriores al formulario asociado a un aviso."""
+
     nombre: str = Field(min_length=2, max_length=120)
     email: str = Field(pattern=EMAIL_REGEX, max_length=200)
     telefono: str | None = Field(default=None, max_length=30)
     mensaje: str | None = Field(default=None, max_length=2000)
     consentimiento: bool
-    publicacion_id: int | None = None
+    publicacion_id: None = None
+    busqueda_id: None = None
+
+    @field_validator("nombre", "email", mode="before")
+    @classmethod
+    def limpiar(cls, valor):
+        return valor.strip() if isinstance(valor, str) else valor
 
 
-@router.post("/leads", status_code=201)
-def crear_lead(datos: LeadEntrada):
-    """Solicitud de contacto desde la web. Exige consentimiento (Ley 21.719) y no devuelve datos personales."""
+def guardar_lead_sin_publicacion(conn, datos: LeadSinPublicacion) -> dict:
     if not datos.consentimiento:
         raise HTTPException(422, "Se necesita el consentimiento para guardar tus datos")
-    try:
-        with conectar() as conn:
-            fila = conn.execute(
-                "INSERT INTO lead (publicacion_id, nombre, email, telefono, mensaje, consentimiento) "
-                "VALUES (%s, %s, %s, %s, %s, true) RETURNING id",
-                (datos.publicacion_id, datos.nombre.strip(), datos.email.strip().lower(),
-                 (datos.telefono or "").strip() or None, (datos.mensaje or "").strip() or None),
-            ).fetchone()
-    except psycopg.errors.ForeignKeyViolation:
-        raise HTTPException(422, "La publicación indicada no existe")
-    return {"id": fila["id"]}
+    return conn.execute(
+        "INSERT INTO lead (nombre, email, telefono, mensaje, consentimiento) "
+        "VALUES (%s, %s, %s, %s, true) RETURNING id",
+        (
+            datos.nombre,
+            datos.email.lower(),
+            (datos.telefono or "").strip() or None,
+            (datos.mensaje or "").strip() or None,
+        ),
+    ).fetchone()
 
 
 # ---------------------------------------------------------------- panel
@@ -112,7 +127,8 @@ LEAD_SELECT = """
     SELECT l.id, l.nombre, l.email, l.telefono, l.mensaje, l.estado,
            l.ejecutivo_id, e.nombre AS ejecutivo_nombre,
            l.creado_en, l.primera_respuesta_en, l.visita_agendada_en,
-           l.publicacion_id, p.titulo AS publicacion_titulo, p.url AS publicacion_url, po.codigo AS portal
+           l.publicacion_id, p.titulo AS publicacion_titulo, p.url AS publicacion_url,
+           po.codigo AS portal
     FROM lead l
     LEFT JOIN ejecutivo e ON e.id = l.ejecutivo_id
     LEFT JOIN publicacion p ON p.id = l.publicacion_id
@@ -122,14 +138,22 @@ LEAD_SELECT = """
 
 @router.get("/leads")
 def listar_leads(
+    yo: SesionEjecutivo,
     estado: Estado | None = None,
-    ejecutivo_id: int | None = Query(None, description="solo los asignados a este ejecutivo"),
+    ejecutivo_id: Annotated[
+        int | None, Query(description="solo los asignados a este ejecutivo")
+    ] = None,
     sin_asignar: bool = False,
-    fecha_desde: date | None = Query(None, description="recibidos desde este día (incluido)"),
-    fecha_hasta: date | None = Query(None, description="recibidos hasta este día (incluido)"),
-    limite: int = Query(30, ge=1, le=100),
-    salto: int = Query(0, ge=0, description="cuántos resultados saltar (para 'Cargar más')"),
-    yo: dict = Depends(ejecutivo_actual),
+    fecha_desde: Annotated[
+        date | None, Query(description="recibidos desde este día (incluido)")
+    ] = None,
+    fecha_hasta: Annotated[
+        date | None, Query(description="recibidos hasta este día (incluido)")
+    ] = None,
+    limite: Annotated[int, Query(ge=1, le=100)] = 30,
+    salto: Annotated[
+        int, Query(ge=0, description="cuántos resultados saltar (para 'Cargar más')")
+    ] = 0,
 ):
     if sin_asignar and ejecutivo_id is not None:
         raise HTTPException(422, "Usa sin_asignar o ejecutivo_id, no los dos")
@@ -143,16 +167,23 @@ def listar_leads(
     if sin_asignar:
         condiciones.append("l.ejecutivo_id IS NULL")
     if fecha_desde:
-        condiciones.append(f"l.creado_en >= (%(fecha_desde)s::date)::timestamp AT TIME ZONE '{ZONA}'")
+        condiciones.append(
+            f"l.creado_en >= (%(fecha_desde)s::date)::timestamp AT TIME ZONE '{ZONA}'"
+        )
         params["fecha_desde"] = fecha_desde
     if fecha_hasta:
-        condiciones.append(f"l.creado_en < ((%(fecha_hasta)s::date + 1)::timestamp AT TIME ZONE '{ZONA}')")
+        condiciones.append(
+            f"l.creado_en < ((%(fecha_hasta)s::date + 1)::timestamp AT TIME ZONE '{ZONA}')"
+        )
         params["fecha_hasta"] = fecha_hasta
     donde = " AND ".join(condiciones)
     with conectar() as conn:
-        total = conn.execute(f"SELECT count(*) AS n FROM lead l WHERE {donde}", params).fetchone()["n"]
+        total = conn.execute(f"SELECT count(*) AS n FROM lead l WHERE {donde}", params).fetchone()[
+            "n"
+        ]
         filas = conn.execute(
-            f"{LEAD_SELECT} WHERE {donde} ORDER BY l.creado_en DESC, l.id DESC LIMIT %(limite)s OFFSET %(salto)s",
+            f"{LEAD_SELECT} WHERE {donde} ORDER BY l.creado_en DESC, l.id DESC "
+            "LIMIT %(limite)s OFFSET %(salto)s",
             params,
         ).fetchall()
     return {"total": total, "resultados": filas}
@@ -164,8 +195,8 @@ class LeadCambio(BaseModel):
 
 
 @router.patch("/leads/{lead_id}")
-def actualizar_lead(lead_id: int, datos: LeadCambio, yo: dict = Depends(ejecutivo_actual)):
-    """Cambia el estado y/o el ejecutivo asignado. Cada cambio queda en el historial (lead_evento)."""
+def actualizar_lead(lead_id: int, datos: LeadCambio, yo: SesionEjecutivo):
+    """Cambia el estado o el ejecutivo asignado y deja registro en el historial."""
     enviados = datos.model_fields_set
     if not enviados & {"estado", "ejecutivo_id"}:
         raise HTTPException(422, "Indica estado y/o ejecutivo_id")
@@ -174,7 +205,8 @@ def actualizar_lead(lead_id: int, datos: LeadCambio, yo: dict = Depends(ejecutiv
 
     with conectar() as conn:
         lead = conn.execute(
-            "SELECT estado, ejecutivo_id, primera_respuesta_en, visita_agendada_en FROM lead WHERE id = %s FOR UPDATE",
+            "SELECT estado, ejecutivo_id, primera_respuesta_en, visita_agendada_en "
+            "FROM lead WHERE id = %s FOR UPDATE",
             (lead_id,),
         ).fetchone()
         if lead is None:
@@ -202,10 +234,14 @@ def actualizar_lead(lead_id: int, datos: LeadCambio, yo: dict = Depends(ejecutiv
             eventos.append(("asignacion", None, None, lead["ejecutivo_id"], datos.ejecutivo_id))
 
         if cambios:
-            conn.execute(f"UPDATE lead SET {', '.join(cambios)}, actualizado_en = now() WHERE id = %(id)s", params)
+            conn.execute(
+                f"UPDATE lead SET {', '.join(cambios)}, actualizado_en = now() WHERE id = %(id)s",
+                params,
+            )
             for tipo, est_ant, est_nuevo, asig_ant, asig_nuevo in eventos:
                 conn.execute(
-                    "INSERT INTO lead_evento (lead_id, ejecutivo_id, tipo, estado_anterior, estado_nuevo, "
+                    "INSERT INTO lead_evento (lead_id, ejecutivo_id, tipo, "
+                    "estado_anterior, estado_nuevo, "
                     "asignado_anterior_id, asignado_nuevo_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                     (lead_id, yo["id"], tipo, est_ant, est_nuevo, asig_ant, asig_nuevo),
                 )
@@ -214,17 +250,20 @@ def actualizar_lead(lead_id: int, datos: LeadCambio, yo: dict = Depends(ejecutiv
 
 # ---------------------------------------------------------------- indicadores
 def _metricas(conn, desde: date, hasta: date) -> dict:
-    """Indicadores de los leads RECIBIDOS en el período (aunque la respuesta o la visita ocurran después)."""
+    """Mide leads recibidos en el período, incluso si se atendieron después."""
     fila = conn.execute(
         f"""
         SELECT count(*) AS recibidas,
-               count(*) FILTER (WHERE primera_respuesta_en IS NULL AND estado <> 'descartado') AS sin_respuesta,
+               count(*) FILTER (WHERE primera_respuesta_en IS NULL
+                                AND estado <> 'descartado') AS sin_respuesta,
                count(primera_respuesta_en) AS con_respuesta,
                percentile_cont(0.5) WITHIN GROUP
-                   (ORDER BY (extract(epoch FROM primera_respuesta_en - creado_en) / 60)::float8) AS mediana_min,
-               avg((extract(epoch FROM primera_respuesta_en - creado_en) / 60)::float8) AS promedio_min,
+                   (ORDER BY (extract(epoch FROM primera_respuesta_en - creado_en) / 60)::float8)
+                   AS mediana_min,
+               avg((extract(epoch FROM primera_respuesta_en - creado_en) / 60)::float8)
+                   AS promedio_min,
                count(visita_agendada_en) AS visitas
-        FROM lead WHERE {_rango('creado_en')}
+        FROM lead WHERE {_rango("creado_en")}
         """,
         {"desde": desde, "hasta": hasta},
     ).fetchone()
@@ -243,11 +282,15 @@ def _metricas(conn, desde: date, hasta: date) -> dict:
 
 @router.get("/leads/indicadores")
 def indicadores(
-    desde: date | None = Query(None, description="primer día del período (por defecto, hace 30 días)"),
-    hasta: date | None = Query(None, description="último día del período (por defecto, hoy en Chile)"),
-    yo: dict = Depends(ejecutivo_actual),
+    yo: SesionEjecutivo,
+    desde: Annotated[
+        date | None, Query(description="primer día del período (por defecto, hace 30 días)")
+    ] = None,
+    hasta: Annotated[
+        date | None, Query(description="último día del período (por defecto, hoy en Chile)")
+    ] = None,
 ):
-    """Indicadores del período y del período anterior de igual largo, para medir el +20% del Caso de Negocio."""
+    """Compara indicadores de dos períodos consecutivos de igual duración."""
     with conectar() as conn:
         hoy = conn.execute(f"SELECT (now() AT TIME ZONE '{ZONA}')::date AS hoy").fetchone()["hoy"]
         hasta = hasta or hoy
@@ -260,7 +303,15 @@ def indicadores(
         anterior_hasta = desde - timedelta(days=1)
         anterior_desde = anterior_hasta - timedelta(days=dias - 1)
         return {
-            "periodo": {"desde": desde, "hasta": hasta, "dias": dias, **_metricas(conn, desde, hasta)},
-            "anterior": {"desde": anterior_desde, "hasta": anterior_hasta,
-                         **_metricas(conn, anterior_desde, anterior_hasta)},
+            "periodo": {
+                "desde": desde,
+                "hasta": hasta,
+                "dias": dias,
+                **_metricas(conn, desde, hasta),
+            },
+            "anterior": {
+                "desde": anterior_desde,
+                "hasta": anterior_hasta,
+                **_metricas(conn, anterior_desde, anterior_hasta),
+            },
         }

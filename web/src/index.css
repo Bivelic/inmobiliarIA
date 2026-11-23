@@ -15,7 +15,7 @@ header p { margin: 0 0 24px; color: #5b6475; }
 .total { color: #5b6475; font-size: 14px; }
 .error { color: #b42318; }
 .avisos { list-style: none; padding: 0; display: grid; gap: 12px; }
-.avisos li { background: #fff; border: 1px solid #e3e6eb; border-radius: 8px; padding: 16px; }
+.avisos > li { background: #fff; border: 1px solid #e3e6eb; border-radius: 8px; padding: 16px; }
 .avisos h2 { font-size: 17px; margin: 0 0 6px; }
 .datos { margin: 0 0 8px; }
 .extracto { margin: 0 0 8px; color: #5b6475; font-size: 14px; }
@@ -24,7 +24,7 @@ header p { margin: 0 0 24px; color: #5b6475; }
 @media (prefers-color-scheme: dark) {
   :root { color: #e7eaf0; background: #12151b; }
   header p, .total, .extracto, .filtros label { color: #a3abba; }
-  .avisos li { background: #1b2029; border-color: #2c3340; }
+  .avisos > li { background: #1b2029; border-color: #2c3340; }
   .filtros select, .filtros input { background: #1b2029; color: inherit; border-color: #3a4252; }
   .avisos a { color: #7aa7ff; }
 }
@@ -38,4 +38,98 @@ header p { margin: 0 0 24px; color: #5b6475; }
 @media (prefers-color-scheme: dark) {
   .cargar-mas { background: #1b2029; border-color: #3a4252; color: #7aa7ff; }
   .cargar-mas:hover:not(:disabled) { background: #232a36; }
+}
+
+/* --- Buscador en lenguaje natural --- */
+.buscador { margin-bottom: 16px; }
+.campo-texto { display: block; font-weight: 600; margin-bottom: 6px; }
+.fila-busqueda { display: flex; gap: 8px; margin-bottom: 10px; }
+.fila-busqueda input {
+  flex: 1; min-width: 0; padding: 12px 14px; font-size: 16px;
+  border: 1px solid #c9ced8; border-radius: 8px; background: #fff; color: inherit;
+}
+.fila-busqueda input:focus { outline: 2px solid #1a5fd0; outline-offset: 1px; border-color: transparent; }
+.buscar {
+  padding: 0 22px; font-size: 16px; font-weight: 600; border: none; border-radius: 8px;
+  background: #1a5fd0; color: #fff; cursor: pointer;
+}
+.buscar:hover:not(:disabled) { background: #154fb0; }
+.buscar:disabled { background: #8aa9e3; cursor: default; }
+.ejemplos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 16px; font-size: 13px; color: #5b6475; }
+.ejemplos button {
+  padding: 4px 10px; font-size: 13px; border: 1px solid #c9ced8; border-radius: 999px;
+  background: #fff; color: #1d2433; cursor: pointer;
+}
+.ejemplos button:hover { border-color: #1a5fd0; color: #1a5fd0; }
+.nota { margin: 4px 0 0; font-size: 13px; color: #5b6475; }
+
+.entendido {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0 4px;
+  padding: 10px 12px; border-radius: 8px; background: #eef3fd; font-size: 14px;
+}
+.entendido > span { font-weight: 600; }
+.entendido ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.entendido li { padding: 2px 10px; border-radius: 999px; background: #fff; border: 1px solid #c4d4f5; }
+.entendido .nota { flex-basis: 100%; }
+
+.calce { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #1d7a4c; }
+.calce.sin-calce { font-weight: 400; color: #8a93a3; }
+.filtros select, .filtros input, .fila-busqueda input { box-sizing: border-box; }
+.etiquetas { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; padding: 0; list-style: none; }
+.etiqueta { padding: 2px 9px; font-size: 13px; border-radius: 999px; background: #f0f2f5; border: 1px solid #e3e6eb; }
+.etiqueta.coincide { background: #e6f4ec; border-color: #9fd3b6; color: #14593a; font-weight: 600; }
+.etiqueta.no { color: #8a93a3; text-decoration: line-through; }
+
+@media (max-width: 560px) {
+  .fila-busqueda { flex-direction: column; }
+  .buscar { padding: 12px; }
+  .filtros select, .filtros input { min-width: 0; width: 100%; }
+  .filtros label { flex: 1 1 140px; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .fila-busqueda input, .ejemplos button { background: #1b2029; border-color: #3a4252; color: inherit; }
+  .ejemplos, .nota { color: #a3abba; }
+  .entendido { background: #1c2740; }
+  .entendido li { background: #1b2029; border-color: #34466d; }
+  .calce { color: #6fd19b; }
+  .calce.sin-calce { color: #7d8698; }
+  .etiqueta { background: #232a36; border-color: #2c3340; }
+  .etiqueta.coincide { background: #173826; border-color: #2c6b48; color: #a6e8c2; }
+  .etiqueta.no { color: #6f7889; }
+}
+
+/* --- Contacto con Aurora --- */
+.acciones { margin-bottom: 10px; }
+.contactar {
+  padding: 8px 16px; font-size: 14px; font-weight: 600; border-radius: 6px; cursor: pointer;
+  border: 1px solid #1a5fd0; background: #fff; color: #1a5fd0;
+}
+.contactar:hover { background: #eef3fd; }
+.contacto { margin-top: 4px; padding: 12px; border-radius: 8px; background: #f6f8fc; border: 1px solid #dfe5f0; }
+.contacto-titulo { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+.contacto-campos { display: flex; flex-wrap: wrap; gap: 10px; }
+.contacto label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #5b6475; }
+.contacto-campos label { flex: 1 1 180px; }
+.contacto input[type="text"], .contacto input:not([type]), .contacto input[type="email"],
+.contacto input[type="tel"], .contacto textarea {
+  box-sizing: border-box; width: 100%; padding: 8px; font: inherit; font-size: 15px; color: #1d2433;
+  border: 1px solid #c9ced8; border-radius: 6px; background: #fff;
+}
+.contacto-mensaje { margin-top: 10px; }
+.contacto label.consentimiento { flex-direction: row; align-items: flex-start; gap: 8px; margin-top: 10px; line-height: 1.35; }
+.consentimiento input { margin-top: 2px; }
+.contacto-botones { display: flex; gap: 8px; margin-top: 12px; }
+.contacto-botones .buscar { padding: 10px 18px; font-size: 15px; }
+.cancelar { padding: 10px 14px; font-size: 15px; border: none; background: none; color: #5b6475; cursor: pointer; }
+.contacto-ok { margin: 4px 0 0; padding: 10px 12px; border-radius: 8px; background: #e6f4ec; color: #14593a; font-weight: 600; font-size: 14px; }
+
+@media (prefers-color-scheme: dark) {
+  .contactar { background: #1b2029; border-color: #7aa7ff; color: #7aa7ff; }
+  .contactar:hover { background: #232a36; }
+  .contacto { background: #161b23; border-color: #2c3340; }
+  .contacto label { color: #a3abba; }
+  .contacto input:not([type="checkbox"]), .contacto textarea { background: #1b2029; color: inherit; border-color: #3a4252; }
+  .cancelar { color: #a3abba; }
+  .contacto-ok { background: #173826; color: #a6e8c2; }
 }

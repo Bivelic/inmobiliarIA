@@ -50,3 +50,18 @@ def test_sin_precio_no_pasa_la_validacion():
     except Exception:
         return
     raise AssertionError("un aviso sin precio debería ser rechazado")
+
+
+
+
+def test_yapo_url_region_completa_y_por_comuna():
+    from models.SearchFilters import SearchFilters
+    from search.sites.YapoSearch import YapoSearch
+
+    yapo = YapoSearch()
+    region = SearchFilters(operation="arriendo", property_type="departamento")
+    comuna = SearchFilters(operation="arriendo", property_type="departamento", commune="Ñuñoa")
+    base = "https://www.yapo.cl/bienes-raices-alquiler-apartamentos"
+    assert yapo.build_url(region, 1) == f"{base}/region-metropolitana"
+    assert yapo.build_url(region, 3) == f"{base}.3/region-metropolitana"
+    assert yapo.build_url(comuna, 2) == f"{base}.2/region-metropolitana-nunoa"
