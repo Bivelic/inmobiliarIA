@@ -11,16 +11,17 @@ import {
   type Orden,
 } from './api'
 import AccesoLeads from './AccesoLeads'
+import santiago from './assets/santiago-departamentos.webp'
 
 // Lo que se edita en el formulario y solo se aplica al apretar "Buscar".
 type Borrador = Omit<Filtros, 'orden'>
 
 // Búsquedas de ejemplo: muestran qué se puede escribir (y sirven para la demo).
 const EJEMPLOS = [
-  'Depto en Ñuñoa que acepte perros',
-  'Amoblado cerca del metro hasta 600 mil',
-  '2 dormitorios con estacionamiento en Providencia',
-  'Con piscina y gimnasio en Las Condes',
+  { titulo: 'Mascotas en Ñuñoa', texto: 'Depto en Ñuñoa que acepte perros' },
+  { titulo: 'Amoblado cerca del metro', texto: 'Amoblado cerca del metro hasta 600 mil' },
+  { titulo: 'Estacionamiento en Providencia', texto: '2 dormitorios con estacionamiento en Providencia' },
+  { titulo: 'Piscina y gimnasio en Las Condes', texto: 'Con piscina y gimnasio en Las Condes' },
 ]
 
 const pesos = (v: string | number | boolean | null) =>
@@ -30,7 +31,13 @@ const pesos = (v: string | number | boolean | null) =>
 
 const superficie = (a: Aviso) => {
   const m = a.m2_total ?? a.m2_util
-  return m ? ` · ${Number(m).toLocaleString('es-CL')} m²` : ''
+  return m ? `${Number(m).toLocaleString('es-CL')} m²` : null
+}
+
+const PORTALES: Record<string, string> = {
+  chilepropiedades: 'Chilepropiedades',
+  toctoc: 'TocToc',
+  yapo: 'Yapo',
 }
 
 // Texto de la etiqueta de un atributo detectado por la IA (RF-06.08).
@@ -169,7 +176,7 @@ function Buscador() {
   const [total, setTotal] = useState(0)
   const [interpretacion, setInterpretacion] = useState<Interpretacion | null>(null)
   const [busquedaId, setBusquedaId] = useState<number | null>(null)
-  const [cargando, setCargando] = useState(false)
+  const [cargando, setCargando] = useState(true)
   const [cargandoMas, setCargandoMas] = useState(false)
   const [mostrarResultados, setMostrarResultados] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -247,50 +254,54 @@ function Buscador() {
   const pedidos = Object.keys(interpretacion?.criterios.atributos ?? {}).length
   const hayTexto = Boolean(filtros.q?.trim())
 
+  const reiniciar = () => {
+    setBorrador({})
+    setMostrarResultados(true)
+    setFiltros({ orden: 'relevancia' })
+  }
+  const hayFiltros = Boolean(borrador.q || borrador.comuna || borrador.precio_max || borrador.dormitorios_min || filtros.orden !== 'relevancia')
+
   return (
-    <main>
-      <header>
-        <div className="cabecera-buscador">
-          <h1>InmobiliarIA</h1>
-          <a className="enlace-panel" href="#/leads">Acceso ejecutivos</a>
+    <main className="pagina-buscador">
+      <section className="hero-buscador" aria-labelledby="titulo-buscador">
+        <div className="hero-texto">
+          <p className="hero-region">Arriendos en Santiago</p>
+          <h1 id="titulo-buscador">Encuentra tu próximo departamento</h1>
+          <p>Describe lo que buscas y compara avisos de distintos portales en un solo lugar.</p>
         </div>
-        <p>
-          Departamentos en arriendo de varios portales inmobiliarios en un solo lugar. Escribe lo
-          que buscas con tus palabras.
-        </p>
-      </header>
+        <img className="hero-imagen" src={santiago} alt="" fetchPriority="high" />
+      </section>
 
       <form className="buscador" onSubmit={buscar}>
-        <label className="campo-texto" htmlFor="q">
-          ¿Qué estás buscando?
-        </label>
+        <label className="campo-texto" htmlFor="q">¿Qué estás buscando?</label>
         <div className="fila-busqueda">
-          <input
-            id="q"
-            type="search"
-            value={borrador.q ?? ''}
-            onChange={cambiar('q')}
-            maxLength={300}
-            placeholder="Ej: depto en Ñuñoa que acepte perros, cerca del metro, hasta 600 mil"
-          />
+          <div className="entrada-busqueda">
+            <span className="lupa" aria-hidden="true" />
+            <input
+              id="q"
+              type="search"
+              value={borrador.q ?? ''}
+              onChange={cambiar('q')}
+              maxLength={300}
+              placeholder="Ej. Depto en Ñuñoa"
+            />
+          </div>
           <button type="submit" className="buscar" disabled={cargando}>
             {cargando ? 'Buscando…' : 'Buscar'}
           </button>
         </div>
 
-        <div className="ejemplos">
-          <span>Prueba:</span>
-          {EJEMPLOS.map((texto) => (
-            <button key={texto} type="button" onClick={() => usarEjemplo(texto)}>
-              {texto}
-            </button>
+        <div className="ejemplos" aria-label="Ideas de búsqueda">
+          <span>Prueba</span>
+          {EJEMPLOS.map(({ titulo, texto }) => (
+            <button key={texto} type="button" title={texto} onClick={() => usarEjemplo(texto)}>{titulo}</button>
           ))}
         </div>
 
         <div className="filtros">
           <label>
             Comuna
-            <select onChange={cambiar('comuna')} defaultValue="">
+            <select aria-label="Comuna" onChange={cambiar('comuna')} value={borrador.comuna ?? ''}>
               <option value="">Todas</option>
               {comunas.map((c) => (
                 <option key={c.slug} value={c.slug}>
@@ -302,17 +313,18 @@ function Buscador() {
 
           <label>
             Precio máximo (CLP)
-            <input type="number" min={0} step={50000} onChange={cambiar('precio_max')} />
+            <input type="number" min={0} step={50000} placeholder="Sin máximo" value={borrador.precio_max ?? ''} onChange={cambiar('precio_max')} />
           </label>
 
           <label>
             Dormitorios mínimos
-            <input type="number" min={0} max={10} onChange={cambiar('dormitorios_min')} />
+            <input type="number" min={0} max={10} placeholder="Sin mínimo" value={borrador.dormitorios_min ?? ''} onChange={cambiar('dormitorios_min')} />
           </label>
 
           <label>
             Ordenar por
             <select
+              aria-label="Ordenar por"
               value={filtros.orden}
               onChange={(e) => setFiltros((f) => ({ ...f, orden: e.target.value as Orden }))}
             >
@@ -323,25 +335,34 @@ function Buscador() {
             </select>
           </label>
         </div>
-        <p className="nota">Los filtros de arriba mandan sobre lo que escribas en el texto.</p>
+        <div className="buscador-pie">
+          <p className="nota">Los filtros tienen prioridad sobre el texto de búsqueda.</p>
+          {hayFiltros && <button type="button" className="boton-texto" onClick={reiniciar}>Limpiar búsqueda</button>}
+        </div>
       </form>
 
-      {/* Controles de visualización de resultados */}
-      {(avisos.length > 0 || cargando || error) && (
-        <button
-          type="button"
-          className="cargar-mas"
-          onClick={() => setMostrarResultados((previo) => !previo)}
-        >
-          {mostrarResultados ? 'Ocultar resultados' : 'Mostrar resultados'}
-        </button>
-      )}
-
-      {/* Resultados */}
-      {mostrarResultados && (
-        <>
-          {error && <p className="error">No se pudo cargar: {error}</p>}
-
+      <section className="resultados" aria-labelledby="titulo-resultados">
+        <div className="cabecera-resultados">
+          <div>
+            <h2 id="titulo-resultados">Resultados</h2>
+            <p className="total" role="status">
+              {cargando
+                ? 'Cargando avisos…'
+                : error && !avisos.length
+                  ? 'Avisos no disponibles'
+                  : `Mostrando ${avisos.length} de ${total.toLocaleString('es-CL')} ${total === 1 ? 'aviso' : 'avisos'}`}
+            </p>
+          </div>
+          {(avisos.length > 0 || cargando || error) && (
+            <button type="button" className="secundario"
+              aria-expanded={mostrarResultados} aria-controls="lista-resultados"
+              onClick={() => setMostrarResultados(previo => !previo)}>
+              {mostrarResultados ? 'Ocultar resultados' : 'Mostrar resultados'}
+            </button>
+          )}
+        </div>
+        <div id="lista-resultados" hidden={!mostrarResultados}>
+          {error && <p className="error" role="alert">No se pudo cargar: {error}</p>}
           {/* Lo que se entendió de la búsqueda (RNF-04) */}
           {!cargando && hayTexto && interpretacion && (
             <section className="entendido" aria-live="polite">
@@ -361,26 +382,33 @@ function Buscador() {
             </section>
           )}
 
-          <p className="total">
-            {cargando
-              ? 'Cargando…'
-              : `Mostrando ${avisos.length} de ${total} ${total === 1 ? 'aviso' : 'avisos'}`}
-          </p>
+          {!cargando && !error && !avisos.length && (
+            <div className="resultados-vacios">
+              <h3>No encontramos avisos</h3>
+              <p>Prueba cambiando la comuna, el precio o los dormitorios.</p>
+              {hayFiltros && <button type="button" className="secundario" onClick={reiniciar}>Ver todos los avisos</button>}
+            </div>
+          )}
 
-          <ul className="avisos">
-            {avisos.map((a) => (
+          {avisos.length > 0 && <ul className="avisos">
+            {avisos.map(a => (
               <li key={a.id}>
-                <h2>{a.titulo}</h2>
-
-                <p className="datos">
+                <div className="aviso-cabecera">
+                  {a.comuna && <span className="aviso-comuna">{a.comuna}</span>}
+                  <span className="aviso-portal">{PORTALES[a.portal] ?? a.portal}</span>
+                </div>
+                <h3>{a.titulo}</h3>
+                <p className="aviso-precio">
                   <strong>{pesos(a.precio_clp)}</strong>
-                  {a.gastos_comunes_clp != null && ` + ${pesos(a.gastos_comunes_clp)} GC`}
-                  {' · '}
-                  {a.comuna ?? 'Comuna s/i'}
-                  {a.dormitorios != null && ` · ${a.dormitorios}D`}
-                  {a.banos != null && `/${a.banos}B`}
-                  {superficie(a)}
+                  {a.gastos_comunes_clp != null && <span>+ {pesos(a.gastos_comunes_clp)} GC</span>}
                 </p>
+                {(a.dormitorios != null || a.banos != null || superficie(a)) && (
+                  <ul className="datos" aria-label="Datos de la propiedad">
+                    {a.dormitorios != null && <li>{a.dormitorios} {a.dormitorios === 1 ? 'dormitorio' : 'dormitorios'}</li>}
+                    {a.banos != null && <li>{a.banos} {a.banos === 1 ? 'baño' : 'baños'}</li>}
+                    {superficie(a) && <li>{superficie(a)}</li>}
+                  </ul>
+                )}
 
                 {pedidos > 0 && (
                   <p className={a.coincidencias?.length ? 'calce' : 'calce sin-calce'}>
@@ -402,22 +430,23 @@ function Buscador() {
                 )}
 
                 <div className="acciones">
-                  <a href={a.url} target="_blank" rel="noopener noreferrer">
-                    Ver aviso original en {a.portal}
+                  <a href={a.url} target="_blank" rel="noopener noreferrer"
+                    aria-label={`Ver aviso original de ${a.titulo} en ${PORTALES[a.portal] ?? a.portal}`}>
+                    Ver aviso original <span aria-hidden="true">↗</span>
                   </a>
+                  <Contacto aviso={a} busquedaId={busquedaId} />
                 </div>
-                <Contacto aviso={a} busquedaId={busquedaId} />
               </li>
             ))}
-          </ul>
+          </ul>}
 
           {!cargando && quedan > 0 && (
             <button className="cargar-mas" onClick={cargarMas} disabled={cargandoMas}>
               {cargandoMas ? 'Cargando…' : `Cargar más (quedan ${quedan})`}
             </button>
           )}
-        </>
-      )}
+        </div>
+      </section>
     </main>
   )
 }
@@ -429,5 +458,21 @@ export default function App() {
     window.addEventListener('hashchange', navegar)
     return () => window.removeEventListener('hashchange', navegar)
   }, [])
-  return ruta === '#/leads' ? <AccesoLeads /> : <Buscador />
+  const panel = ruta === '#/leads'
+  return (
+    <>
+      <header className="barra-sitio">
+        <nav className="barra-interior" aria-label="Navegación principal">
+          <a className="marca" href="#/" aria-label="InmobiliarIA inicio">
+            <span className="marca-icono" aria-hidden="true"><i /></span>
+            <span>Inmobiliar<span className="marca-ia">IA</span></span>
+          </a>
+          <a className="enlace-panel" href={panel ? '#/' : '#/leads'}>
+            {panel ? 'Volver al buscador' : 'Acceso ejecutivos'} <span aria-hidden="true">↗</span>
+          </a>
+        </nav>
+      </header>
+      {panel ? <AccesoLeads /> : <Buscador />}
+    </>
+  )
 }

@@ -28,21 +28,40 @@ const opcionesEstado = Object.entries(ESTADOS).map(([valor, texto]) =>
   <option key={valor} value={valor}>{texto}</option>,
 )
 
-function filaIndicadores(periodo: Periodo, etiqueta: string) {
-  const mediana = periodo.mediana_primera_respuesta_min
-  const tasa = periodo.tasa_visitas_pct
+const intervalo = (periodo: Periodo) =>
+  `${fechaCorta.format(new Date(periodo.desde))} al ${fechaCorta.format(new Date(periodo.hasta))}`
+
+const metricas = [
+  { titulo: 'Solicitudes recibidas', campo: 'recibidas' },
+  { titulo: 'Sin respuesta', campo: 'sin_respuesta' },
+  { titulo: 'Primera respuesta (mediana)', campo: 'mediana_primera_respuesta_min', unidad: ' min' },
+  { titulo: 'Visitas agendadas', campo: 'visitas_agendadas' },
+  { titulo: 'Tasa de visitas', campo: 'tasa_visitas_pct', unidad: ' %' },
+] as const
+
+const valorIndicador = (valor: number | null, unidad = '') =>
+  valor == null ? '—' : numero.format(valor) + unidad
+
+function ResumenIndicadores({ periodo, anterior }: Indicadores) {
   return (
-    <tr>
-      <th scope="row">
-        {etiqueta}
-        <small>{fechaCorta.format(new Date(periodo.desde))} – {fechaCorta.format(new Date(periodo.hasta))}</small>
-      </th>
-      <td>{numero.format(periodo.recibidas)}</td>
-      <td>{numero.format(periodo.sin_respuesta)}</td>
-      <td>{mediana == null ? '—' : `${numero.format(mediana)} min`}</td>
-      <td>{numero.format(periodo.visitas_agendadas)}</td>
-      <td>{tasa == null ? '—' : `${numero.format(tasa)} %`}</td>
-    </tr>
+    <section className="indicadores-leads" aria-labelledby="indicadores-leads">
+      <div className="cabecera-seccion">
+        <h2 id="indicadores-leads">Indicadores por período</h2>
+        <p className="nota">Actual · {intervalo(periodo)}<br />Anterior · {intervalo(anterior)}</p>
+      </div>
+      <dl className="metricas-leads">
+        {metricas.map(metrica => {
+          const unidad = 'unidad' in metrica ? metrica.unidad : ''
+          return (
+            <div className="metrica-leads" key={metrica.campo}>
+              <dt>{metrica.titulo}</dt>
+              <dd>{valorIndicador(periodo[metrica.campo], unidad)}</dd>
+              <dd className="metrica-anterior">Anterior {valorIndicador(anterior[metrica.campo], unidad)}</dd>
+            </div>
+          )
+        })}
+      </dl>
+    </section>
   )
 }
 
@@ -234,7 +253,6 @@ export default function PanelLeads({ sesion, cerrarSesion }: {
     <main className="panel-leads">
       <header className="cabecera-leads">
         <div>
-          <a className="enlace-panel" href="#/">Volver al buscador</a>
           <h1>Panel de leads</h1>
           <p>{ejecutivo.nombre}</p>
         </div>
@@ -271,29 +289,7 @@ export default function PanelLeads({ sesion, cerrarSesion }: {
       {mensaje && <p className="contacto-ok" role="status">{mensaje}</p>}
       {cargando ? <p role="status">Cargando solicitudes…</p> : datos && (
         <>
-          {indicadores && (
-            <section className="indicadores-leads" aria-labelledby="indicadores-leads">
-              <h2 id="indicadores-leads">Indicadores por período</h2>
-              <div className="tabla-indicadores">
-                <table aria-labelledby="indicadores-leads">
-                  <thead>
-                    <tr>
-                      <th scope="col">Período</th>
-                      <th scope="col">Recibidas</th>
-                      <th scope="col">Sin respuesta</th>
-                      <th scope="col">Mediana primera respuesta</th>
-                      <th scope="col">Visitas agendadas</th>
-                      <th scope="col">Tasa de visitas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filaIndicadores(indicadores.periodo, 'Seleccionado')}
-                    {filaIndicadores(indicadores.anterior, 'Anterior')}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
+          {indicadores && <ResumenIndicadores {...indicadores} />}
           <section className="solicitudes-leads" aria-labelledby="solicitudes-leads">
             <h2 id="solicitudes-leads">Solicitudes de contacto</h2>
             <p className="total">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { consultarSesion, ErrorLeads, iniciarSesion, type Sesion } from './leadsApi'
 import PanelLeads from './PanelLeads'
+import santiago from './assets/santiago-departamentos.webp'
 import './leads.css'
 
 const CLAVE_SESION = 'inmobiliaria.sesionEjecutivo'
@@ -56,10 +57,10 @@ export default function AccesoLeads() {
 
   return (
     <main className="acceso-leads">
-      <a className="enlace-panel" href="#/">Volver al buscador</a>
+      <img className="acceso-imagen" src={santiago} alt="" />
       <section className="acceso-tarjeta">
-        <h1>Panel de leads</h1>
-        <p>Acceso para ejecutivos de Aurora Propiedades.</p>
+        <h1>Acceso ejecutivos</h1>
+        <p>Ingresa con tu cuenta de Aurora Propiedades.</p>
         {comprobando ? <p role="status">Comprobando sesión…</p> : (
           <form onSubmit={ingresar} className="formulario-acceso">
             <label>Correo
