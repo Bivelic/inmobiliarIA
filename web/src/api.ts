@@ -1,5 +1,5 @@
 // Cliente de la API. La URL viene de VITE_API_URL (archivo web/.env.local o variable en Vercel).
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 // La API puede mandar los montos como número o como texto: siempre se leen con Number().
 type Monto = string | number | null

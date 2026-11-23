@@ -390,3 +390,13 @@ Usa **"Guardar como → Página web, solo HTML"** del navegador. **No uses** `sc
 | Un campo sale siempre vacío | El sitio cambió su estructura: revisa con `scrapy shell "<url>"` y actualiza el fixture y la prueba. |
 | Acentos dañados en un archivo `.html` guardado | Se guardó con `>` en PowerShell. Vuelve a guardarlo con el navegador. |
 | El frontend dice "No se pudo cargar" | La API no está corriendo, o `VITE_API_URL` / `CORS_ORIGINS` no coinciden. |
+### Panel de leads
+
+Para habilitar el panel de ejecutivos (SDC-001), ejecuta `python scripts/init_db.py` para
+aplicar la migración de leads. Configura `JWT_SECRET` en el backend con una clave aleatoria
+de al menos 32 caracteres. `JWT_HORAS` tiene un valor predeterminado de 8 horas.
+
+Crea una cuenta de prueba con
+`python scripts/crear_ejecutivo.py --nombre "Ejecutiva de prueba" --email ejecutiva@example.invalid`.
+El script solicita la contraseña por teclado. Abre **Acceso ejecutivos** desde el buscador
+para iniciar sesión, asignar solicitudes y ver los indicadores del período.

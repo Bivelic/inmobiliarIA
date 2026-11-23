@@ -23,13 +23,13 @@ from decimal import Decimal
 
 import psycopg
 
+from core.extracto import extracto_publico
 from core.ia.catalogo import Atributo
 from core.ia.interpretacion import Criterios
 
 PESOS = {"atributos": Decimal("0.70"), "recencia": Decimal("0.20"), "completitud": Decimal("0.10")}
 DIAS_RECENCIA = 30
 CONFIANZA_SIN_DATO = 0.7  # si la IA no informó confianza
-LARGO_EXTRACTO = 280
 
 ORDENES = {
     "relevancia": "puntaje DESC, id DESC",
@@ -63,7 +63,7 @@ atr AS (
 ),
 puntuado AS (
     SELECT p.id, po.codigo AS portal, p.url, p.operacion, p.tipo_propiedad, p.titulo,
-           left(p.descripcion, %(largo)s) AS extracto,
+           p.descripcion,
            p.precio_clp, p.precio_uf, p.gastos_comunes_clp,
            c.nombre AS comuna, c.slug AS comuna_slug,
            p.dormitorios, p.banos, p.m2_util, p.m2_total, p.estacionamientos,
@@ -144,7 +144,6 @@ def buscar(
     filtros = ["p.activa", "p.duplicado_de IS NULL", "p.operacion = %(operacion)s"]
     params: dict = {
         "operacion": criterios.operacion or "arriendo",
-        "largo": LARGO_EXTRACTO,
         "dias": DIAS_RECENCIA,
         "conf_def": CONFIANZA_SIN_DATO,
         "p_atr": PESOS["atributos"],
@@ -196,6 +195,7 @@ def buscar(
     filas = conn.execute(sql, params).fetchall()
     total = filas[0]["total"] if filas else 0
     for f in filas:
+        f["extracto"] = extracto_publico(f.pop("descripcion"))
         for clave in ("total", "s_atributos", "s_recencia", "s_completitud", "fecha_orden"):
             f.pop(clave, None)
     return Pagina(total=total, resultados=filas)

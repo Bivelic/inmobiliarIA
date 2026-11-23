@@ -15,9 +15,12 @@ import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.leads import LeadSinPublicacion, guardar_lead_sin_publicacion
+from api.leads import router as leads_router
 from core.buscador import atributos_de, buscar, guardar_busqueda, guardar_resultados
 from core.config import cors_origins
 from core.db import conectar
+from core.extracto import extracto_publico
 from core.ia.catalogo import cargar_catalogo
 from core.ia.interpretacion import (
     Criterios,
@@ -33,17 +36,16 @@ app = FastAPI(title="InmobiliarIA API", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins(),
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["*"],
 )
+app.include_router(leads_router)
 
 # Regla 2.1.3: se muestra un extracto de la descripción, nunca el texto completo ni fotos;
 # el detalle completo se ve en el aviso original (campo url).
-LARGO_EXTRACTO = 280
-
-CAMPOS = f"""
+CAMPOS = """
     p.id, po.codigo AS portal, p.url, p.operacion, p.tipo_propiedad, p.titulo,
-    left(p.descripcion, {LARGO_EXTRACTO}) AS extracto,
+    p.descripcion,
     p.precio_clp, p.precio_uf, p.gastos_comunes_clp,
     c.nombre AS comuna, c.slug AS comuna_slug,
     p.dormitorios, p.banos, p.m2_util, p.m2_total, p.estacionamientos,
@@ -102,6 +104,8 @@ def listar_publicaciones(
             f"ORDER BY {ORDENES[orden]} LIMIT %(limite)s OFFSET %(desde)s",
             params,
         ).fetchall()
+    for fila in filas:
+        fila["extracto"] = extracto_publico(fila.pop("descripcion"))
     return {"total": total, "resultados": filas}
 
 
@@ -114,6 +118,7 @@ def detalle_publicacion(publicacion_id: int):
         if not fila:
             raise HTTPException(status_code=404, detail="Publicación no encontrada")
         fila["atributos"] = atributos_de(conn, [publicacion_id])[publicacion_id]
+    fila["extracto"] = extracto_publico(fila.pop("descripcion"))
     return fila
 
 
@@ -263,10 +268,12 @@ def metricas():
 
 # --------------------------------------------------------------------------- contacto (RF-07)
 @app.post("/leads", status_code=201)
-def crear_lead(solicitud: SolicitudContacto, tareas: BackgroundTasks):
+def crear_lead(solicitud: SolicitudContacto | LeadSinPublicacion, tareas: BackgroundTasks):
     """Registra una solicitud de contacto (con consentimiento) y avisa a Aurora por correo.
     El correo se envía después de responder, así el formulario no espera a Resend."""
     with conectar() as conn:
+        if isinstance(solicitud, LeadSinPublicacion):
+            return guardar_lead_sin_publicacion(conn, solicitud)
         lead = guardar_lead(conn, solicitud)
     if lead is None:
         raise HTTPException(status_code=404, detail="Publicación no encontrada")
