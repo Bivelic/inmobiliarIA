@@ -11,6 +11,7 @@ export default function AccesoLeads() {
   const [comprobando, setComprobando] = useState(() => Boolean(sessionStorage.getItem(CLAVE_SESION)))
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
+  const [verClave, setVerClave] = useState(false)
   const cerrarSesion = useCallback((mensaje = '') => {
     sessionStorage.removeItem(CLAVE_SESION)
     setSesion(null)
@@ -45,6 +46,7 @@ export default function AccesoLeads() {
     iniciarSesion(String(form.get('email')).trim(), String(form.get('password')))
       .then(nueva => {
         sessionStorage.setItem(CLAVE_SESION, nueva.token)
+        setVerClave(false)
         setSesion(nueva)
       })
       .catch((e: unknown) => setError(e instanceof ErrorLeads
@@ -57,18 +59,31 @@ export default function AccesoLeads() {
 
   return (
     <main className="acceso-leads">
-      <img className="acceso-imagen" src={santiago} alt="" />
-      <section className="acceso-tarjeta">
-        <h1>Acceso ejecutivos</h1>
-        <p>Ingresa con tu cuenta de Aurora Propiedades.</p>
+      <div className="acceso-visual">
+        <img className="acceso-imagen" src={santiago} alt="" />
+        <div className="acceso-identidad">
+          <span className="marca-icono" aria-hidden="true"><i /></span>
+          <p>Aurora<br />Propiedades</p>
+        </div>
+      </div>
+      <section className="acceso-tarjeta" aria-labelledby="titulo-acceso">
+        <h1 id="titulo-acceso">Acceso ejecutivos</h1>
+        <p>Inicia sesión para gestionar las solicitudes de contacto.</p>
         {comprobando ? <p role="status">Comprobando sesión…</p> : (
           <form onSubmit={ingresar} className="formulario-acceso">
             <label>Correo
               <input type="email" name="email" autoComplete="username" required maxLength={200} />
             </label>
-            <label>Contraseña
-              <input type="password" name="password" autoComplete="current-password" required maxLength={256} />
-            </label>
+            <div className="campo-clave">
+              <label htmlFor="clave-acceso">Contraseña</label>
+              <div>
+                <input id="clave-acceso" type={verClave ? 'text' : 'password'} name="password"
+                  autoComplete="current-password" required maxLength={256} />
+                <button type="button" onClick={() => setVerClave(actual => !actual)}>
+                  {verClave ? 'Ocultar' : 'Mostrar'}<span className="solo-lectura"> contraseña</span>
+                </button>
+              </div>
+            </div>
             {error && <p role="alert" className="error">{error}</p>}
             <button className="buscar" disabled={enviando}>
               {enviando ? 'Ingresando…' : 'Iniciar sesión'}

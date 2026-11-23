@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   actualizarLead,
   consultarIndicadores,
@@ -41,6 +41,9 @@ const metricas = [
 
 const valorIndicador = (valor: number | null, unidad = '') =>
   valor == null ? '—' : numero.format(valor) + unidad
+
+const iniciales = (nombre: string) =>
+  nombre.trim().split(/\s+/).slice(0, 2).map(palabra => palabra[0]).join('').toLocaleUpperCase('es-CL')
 
 function ResumenIndicadores({ periodo, anterior }: Indicadores) {
   return (
@@ -173,6 +176,10 @@ export default function PanelLeads({ sesion, cerrarSesion }: {
   const [mensaje, setMensaje] = useState('')
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
+  const [seleccion, setSeleccion] = useState<number | null>(null)
+  const [visitados, setVisitados] = useState<number[]>([])
+  const detalle = useRef<HTMLDivElement>(null)
+  const seleccionado = datos?.resultados.find(lead => lead.id === seleccion) ?? datos?.resultados[0]
 
   const mensajeError = useCallback((e: unknown) => {
     if (e instanceof ErrorLeads) {
@@ -236,6 +243,7 @@ export default function PanelLeads({ sesion, cerrarSesion }: {
   function prepararCarga() {
     setCargando(true)
     setError('')
+    setVisitados([])
   }
 
   function recargar() {
@@ -249,14 +257,28 @@ export default function PanelLeads({ sesion, cerrarSesion }: {
     setPagina(siguiente)
   }
 
+  function abrirLead(id: number) {
+    if (seleccionado) setVisitados(previos => previos.includes(seleccionado.id) ? previos : [...previos, seleccionado.id])
+    setSeleccion(id)
+    setMensaje('')
+    if (window.matchMedia('(max-width: 720px)').matches) {
+      detalle.current?.focus({ preventScroll: true })
+      detalle.current?.scrollIntoView({ block: 'start' })
+    }
+  }
+
   return (
     <main className="panel-leads">
       <header className="cabecera-leads">
         <div>
           <h1>Panel de leads</h1>
-          <p>{ejecutivo.nombre}</p>
+          <p>Revisa las solicitudes de contacto y gestiona su seguimiento.</p>
         </div>
-        <button className="contactar" onClick={() => cerrarSesion()}>Cerrar sesión</button>
+        <div className="cuenta-leads">
+          <span className="avatar-lead" aria-hidden="true">{iniciales(ejecutivo.nombre)}</span>
+          <strong>{ejecutivo.nombre}</strong>
+          <button className="secundario" onClick={() => cerrarSesion()}>Cerrar sesión</button>
+        </div>
       </header>
 
       <form className="controles-leads filtro-leads" onSubmit={filtrar}>
@@ -291,22 +313,50 @@ export default function PanelLeads({ sesion, cerrarSesion }: {
         <>
           {indicadores && <ResumenIndicadores {...indicadores} />}
           <section className="solicitudes-leads" aria-labelledby="solicitudes-leads">
-            <h2 id="solicitudes-leads">Solicitudes de contacto</h2>
-            <p className="total">
-              {datos.total === 0
-                ? 'No hay solicitudes para los filtros seleccionados.'
-                : `Mostrando ${pagina * LEADS_POR_PAGINA + 1} a ${pagina * LEADS_POR_PAGINA + datos.resultados.length} de ${datos.total}`}
-            </p>
-            {datos.resultados.map(lead => (
-              <FichaLead key={lead.id} lead={lead} ejecutivos={ejecutivos}
-                token={token} alGuardar={alGuardar} mensajeError={mensajeError} />
-            ))}
-            {datos.total > LEADS_POR_PAGINA && (
-              <nav aria-label="Páginas de solicitudes" className="paginacion-leads">
-                <button className="contactar" disabled={!pagina} onClick={() => cambiarPagina(pagina - 1)}>Anterior</button>
-                <button className="contactar" disabled={(pagina + 1) * LEADS_POR_PAGINA >= datos.total}
-                  onClick={() => cambiarPagina(pagina + 1)}>Siguiente</button>
-              </nav>
+            <div className="solicitudes-cabecera">
+              <h2 id="solicitudes-leads">Solicitudes de contacto</h2>
+              <p className="nota">
+                {datos.total === 0 ? '0 solicitudes' : `${pagina * LEADS_POR_PAGINA + 1}–${pagina * LEADS_POR_PAGINA + datos.resultados.length} de ${datos.total}`}
+              </p>
+            </div>
+            {seleccionado ? (
+              <div className="bandeja-leads">
+                <div className="navegacion-leads">
+                  <ul className="lista-leads" aria-label="Solicitudes">
+                    {datos.resultados.map(lead => (
+                      <li key={lead.id}>
+                        <button type="button" aria-pressed={lead.id === seleccionado.id}
+                          aria-controls="detalle-solicitud" onClick={() => abrirLead(lead.id)}>
+                          <span className="avatar-lead" aria-hidden="true">{iniciales(lead.nombre)}</span>
+                          <span className="resumen-lead">
+                            <strong>{lead.nombre}</strong>
+                            <span>{lead.publicacion_titulo || 'Solicitud de contacto'}</span>
+                            <small className={`estado-lead estado-${lead.estado}`}>{ESTADOS[lead.estado]}</small>
+                          </span>
+                          <span className="flecha-lead" aria-hidden="true">›</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {datos.total > LEADS_POR_PAGINA && (
+                    <nav aria-label="Páginas de solicitudes" className="paginacion-leads">
+                      <button className="secundario" disabled={!pagina} onClick={() => cambiarPagina(pagina - 1)}>Anterior</button>
+                      <button className="secundario" disabled={(pagina + 1) * LEADS_POR_PAGINA >= datos.total}
+                        onClick={() => cambiarPagina(pagina + 1)}>Siguiente</button>
+                    </nav>
+                  )}
+                </div>
+                <div className="area-detalle-lead" id="detalle-solicitud" ref={detalle} tabIndex={-1}>
+                  {datos.resultados.filter(lead => lead.id === seleccionado.id || visitados.includes(lead.id)).map(lead => (
+                    <div key={lead.id} hidden={lead.id !== seleccionado.id}>
+                      <FichaLead lead={lead} ejecutivos={ejecutivos}
+                        token={token} alGuardar={alGuardar} mensajeError={mensajeError} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="leads-vacio">No hay solicitudes para los filtros seleccionados.</p>
             )}
           </section>
         </>
