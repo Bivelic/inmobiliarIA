@@ -13,13 +13,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import cors_origins
 from core.db import conectar
 
+from api.leads import router as leads_router
+
 app = FastAPI(title="InmobiliarIA API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins(),
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["*"],
 )
+app.include_router(leads_router)
 
 # Regla 2.1.3: se muestra un extracto de la descripción, nunca el texto completo ni fotos;
 # el detalle completo se ve en el aviso original (campo url).

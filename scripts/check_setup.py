@@ -30,9 +30,9 @@ def python_ok():
 
 
 def paquetes_ok():
-    for p in ["scrapy", "pydantic", "psycopg", "fastapi", "dotenv"]:
+    for p in ["scrapy", "pydantic", "psycopg", "fastapi", "dotenv", "jwt"]:
         importlib.import_module(p)
-    return "scrapy, pydantic, psycopg, fastapi, python-dotenv"
+    return "scrapy, pydantic, psycopg, fastapi, python-dotenv, PyJWT"
 
 
 def env_ok():
@@ -53,7 +53,11 @@ def base_ok():
 def tablas_ok():
     from core.db import conectar
 
-    esperadas = {"portal", "comuna", "publicacion", "ejecucion_scraping", "error_scraping"}
+    esperadas = {
+    "portal", "comuna", "publicacion", "ejecucion_scraping", "error_scraping",
+    "lead", "ejecutivo", "lead_evento",
+    }
+    
     with conectar() as conn:
         filas = conn.execute(
             "SELECT table_name FROM information_schema.tables "
@@ -66,12 +70,18 @@ def tablas_ok():
         comunas = conn.execute("SELECT count(*) AS n FROM comuna").fetchone()["n"]
         return f"{len(filas)} tablas, {portales} portales, {comunas} comunas"
 
+def jwt_ok():
+    from core.config import jwt_secret
+
+    jwt_secret()  # falla si falta o tiene menos de 32 caracteres
+    return "JWT_SECRET definida"
 
 revisar("Python", python_ok)
 revisar("Paquetes instalados", paquetes_ok)
 revisar("Archivo .env con DATABASE_URL", env_ok)
 revisar("Conexión a la base", base_ok)
 revisar("Tablas y datos iniciales", tablas_ok)
+revisar("JWT_SECRET para el login de ejecutivos", jwt_ok)
 
 print()
 if errores:

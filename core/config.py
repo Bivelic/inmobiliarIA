@@ -28,3 +28,16 @@ def cors_origins() -> list[str]:
 
 def scraper_contacto() -> str:
     return os.getenv("SCRAPER_CONTACTO", "sin-contacto")
+
+def jwt_secret() -> str:
+    valor = _obligatoria("JWT_SECRET")
+    if len(valor) < 32:
+        raise RuntimeError(
+            "JWT_SECRET debe tener al menos 32 caracteres. Genera una con: "
+            'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+        )
+    return valor
+
+
+def jwt_horas() -> int:
+    return int(os.getenv("JWT_HORAS", "8"))
