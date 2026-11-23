@@ -54,10 +54,10 @@ def tablas_ok():
     from core.db import conectar
 
     esperadas = {
-    "portal", "comuna", "publicacion", "ejecucion_scraping", "error_scraping",
-    "lead", "ejecutivo", "lead_evento",
+        "portal", "comuna", "publicacion", "ejecucion_scraping", "error_scraping",
+        "lead", "ejecutivo", "lead_evento",
     }
-    
+
     with conectar() as conn:
         filas = conn.execute(
             "SELECT table_name FROM information_schema.tables "
